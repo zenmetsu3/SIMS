@@ -122,11 +122,6 @@ function showSection(sectionId) {
     } else if (sectionId === 'profile-view') {
         document.querySelector('.sidebar li:nth-child(2)').classList.add('active'); // Keep Students active
         document.getElementById('page-title').innerText = 'Student Profile';
-    } else if (sectionId === 'project-info') {
-        // Assuming Project Info is the 3rd item
-        document.querySelector('.sidebar li:nth-child(3)').classList.add('active'); 
-        document.getElementById('page-title').innerText = 'Project Info';
-        fetchReadme();
     }
 }
 
@@ -288,68 +283,4 @@ window.onclick = function(event) {
     }
 }
 
-// README Fetch Logic
-async function fetchReadme() {
-    const readmeContainer = document.getElementById('readme-content');
-    const CACHE_KEY = 'readme_data';
-    const CACHE_TIME_KEY = 'readme_timestamp';
-    const CACHE_DURATION = 3600000; // 1 hour
-
-    // Check Cache
-    const cachedData = localStorage.getItem(CACHE_KEY);
-    const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
-    const now = Date.now();
-
-    if (cachedData && cachedTime && (now - parseInt(cachedTime) < CACHE_DURATION)) {
-        readmeContainer.innerHTML = cachedData;
-        return;
-    }
-
-    try {
-        readmeContainer.innerHTML = `
-            <div class="loading-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 200px; color: var(--text-color);">
-                <i class="fas fa-spinner fa-spin fa-3x" style="margin-bottom: 1rem; color: var(--primary-color);"></i>
-                <p>Loading Documentation from GitHub...</p>
-            </div>
-        `;
-
-        const response = await fetch('https://api.github.com/repos/zenmetsu3/student_impormation_system/readme');
-        
-        if (!response.ok) {
-            if (response.status === 404) {
-                throw new Error('README.md not found in the repository. Please add a README to the repository root.');
-            }
-            throw new Error(`GitHub API Error: ${response.statusText} (${response.status})`);
-        }
-
-        const data = await response.json();
-        
-        // Decode Base64 (handle UTF-8 characters properly)
-        // GitHub API returns content in base64.
-        // We use a safe decoding method for UTF-8 strings.
-        const content = decodeURIComponent(escape(atob(data.content)));
-        
-        // Parse Markdown using Marked.js
-        // Assuming marked is loaded globally via CDN
-        const htmlContent = marked.parse(content);
-        
-        readmeContainer.innerHTML = htmlContent;
-
-        // Save to Cache
-        localStorage.setItem(CACHE_KEY, htmlContent);
-        localStorage.setItem(CACHE_TIME_KEY, now.toString());
-
-    } catch (error) {
-        console.error('Error fetching README:', error);
-        readmeContainer.innerHTML = `
-            <div class="error-state" style="text-align:center; padding: 3rem; color: var(--danger);">
-                <i class="fas fa-exclamation-triangle fa-3x" style="margin-bottom: 1rem;"></i>
-                <h3>Failed to load documentation</h3>
-                <p style="color: var(--text-color); margin-bottom: 1rem;">${error.message}</p>
-                <button onclick="fetchReadme()" class="btn-primary" style="margin-top:1rem;">
-                    <i class="fas fa-sync-alt"></i> Retry
-                </button>
-            </div>
-        `;
-    }
-}
+// README Fetch Logic Removed

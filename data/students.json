@@ -60,5 +60,24 @@
     "motherName": "",
     "photo": "/uploads/photo-1770375119055-239022267.jpg",
     "name": "ZAI PEREZ"
+  },
+  {
+    "studentId": "gds",
+    "firstName": "SDFSDF",
+    "middleName": "FSFSDF",
+    "lastName": "SFSFS",
+    "dob": "",
+    "course": "BSP",
+    "yearLevel": 4,
+    "admissionDate": "2012-06-06",
+    "mobileNumber": "sdfsd",
+    "email": "asdhashsauud@gmail.com",
+    "age": "21",
+    "currentAddress": "",
+    "permanentAddress": "",
+    "fatherName": "CZXCZCZ",
+    "motherName": "CZXCXZC",
+    "photo": null,
+    "name": "SDFSDF FSFSDF SFSFS"
   }
 ]
