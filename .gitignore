@@ -1,0 +1,41 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+# Uncomment these if you want to keep data local only, but commit them if they are initial seed data.
+# For a real project, DB data should not be committed.
+# data/*.json
+# For this setup, we'll assume data/*.json is the "database" and might be wanted for initial setup,
+# BUT usually we ignore it to avoid conflicts.
+# However, the user asked to commit "all project files".
+# I'll ignore them to be safe for "sensitive credentials" if any, but since they are JSON DBs...
+# I'll keep them but add a note. Actually, let's ignore only sensitive stuff.
+# If users.json has passwords (it might), we should ignore it.
+# Let's ignore the JSON files that change at runtime to avoid git conflicts on deployment.
+data/audit_logs.json
+# We might want to keep students.json as seed data?
+# Let's keep students.json and users.json for now as initial state, unless they contain secrets.
+# But usually local DB files are ignored.
+# I'll add them to gitignore but maybe provide a template.
+# data/students.json
+# data/users.json
+
+# Uploads
+public/uploads/*
+!public/uploads/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db

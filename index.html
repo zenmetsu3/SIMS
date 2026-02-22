@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Information Management System</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="brand">
+                <i class="fas fa-graduation-cap"></i>
+                <h2>SIMS</h2>
+            </div>
+            <ul>
+                <li class="active" onclick="showSection('dashboard')"><i class="fas fa-home"></i> Dashboard</li>
+                <li onclick="showSection('students')"><i class="fas fa-users"></i> Students</li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header>
+                <h1 id="page-title">Overview</h1>
+                <div class="user-profile" id="user-profile" style="display: none;">
+                    <span id="username-display"></span>
+                    <i class="fas fa-user-circle"></i>
+                </div>
+            </header>
+
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="section active">
+                <div class="stats-cards">
+                    <div class="card">
+                        <div class="card-info">
+                            <h3>Total Students</h3>
+                            <p id="total-students">0</p>
+                        </div>
+                        <div class="card-icon">
+                            <i class="fas fa-user-graduate"></i>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Students Section (List) -->
+            <section id="students" class="section" style="display: none;">
+                <div class="section-header">
+                    <h2>Student Records</h2>
+                    <button class="btn-primary" onclick="openModal('add')"><i class="fas fa-plus"></i> Add Student</button>
+                </div>
+
+                <div class="controls">
+                    <div class="search-bar">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="searchInput" placeholder="Search by ID or Name..." onkeyup="searchStudents()">
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Course</th>
+                                <th>Year</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentTableBody">
+                            <!-- Data populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Profile Detail Section (New) -->
+            <section id="profile-view" class="section" style="display: none;">
+                <div class="section-header">
+                    <h2><span style="color:var(--secondary-color); cursor:pointer;" onclick="showSection('students')">Students</span> / Profile</h2>
+                    <div class="profile-actions">
+                        <button class="btn-primary" onclick="editCurrentProfile()">Edit Profile</button>
+                    </div>
+                </div>
+
+                <div class="profile-container">
+                    <!-- Left Column: Identity -->
+                    <div class="profile-sidebar">
+                        <div class="profile-photo-container">
+                            <img id="view-photo" src="" alt="Student Photo" class="profile-photo" onerror="handleImageError(this)">
+                        </div>
+                        <h2 id="view-fullname">Student Name</h2>
+                        <p id="view-id" class="profile-id">#ID</p>
+                        <div class="quick-stats">
+                            <div class="stat">
+                                <span class="label">Course</span>
+                                <span id="view-course" class="value">-</span>
+                            </div>
+                            <div class="stat">
+                                <span class="label">Year</span>
+                                <span id="view-year" class="value">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Details -->
+                    <div class="profile-details">
+                        <!-- Personal Info -->
+                        <div class="detail-card">
+                            <h3>Personal Information</h3>
+                            <div class="detail-grid">
+                                <div class="detail-item">
+                                    <label>First Name</label>
+                                    <span id="view-firstname">-</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Middle Name</label>
+                                    <span id="view-middlename">-</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Last Name</label>
+                                    <span id="view-lastname">-</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Date of Birth</label>
+                                    <span id="view-dob">-</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Age</label>
+                                    <span id="view-age">-</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Admission Date</label>
+                                    <span id="view-admission">-</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Mobile</label>
+                                    <span id="view-mobile">-</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Email</label>
+                                    <span id="view-email">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Address -->
+                        <div class="detail-card">
+                            <h3>Address Details</h3>
+                            <div class="detail-grid">
+                                <div class="detail-item full-width">
+                                    <label>Current Address</label>
+                                    <span id="view-current-address">-</span>
+                                </div>
+                                <div class="detail-item full-width">
+                                    <label>Permanent Address</label>
+                                    <span id="view-permanent-address">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Parent/Guardian -->
+                        <div class="detail-card">
+                            <h3>Guardian Details</h3>
+                            <div class="detail-grid">
+                                <div class="detail-item">
+                                    <label>Father's Name</label>
+                                    <span id="view-father">-</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Mother's Name</label>
+                                    <span id="view-mother">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+
+                    </div>
+                </div>
+            </section>
+            <!-- Project Info Section Removed -->
+        </main>
+    </div>
+
+    <!-- Enhanced Modal -->
+    <div id="studentModal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">Add Student</h2>
+            <form id="studentForm" enctype="multipart/form-data">
+                <input type="hidden" id="editMode" value="false">
+                
+                <div class="form-columns">
+                    <!-- Column 1 -->
+                    <div class="form-column">
+                        <h3>Identity</h3>
+                        <div class="form-group">
+                            <label>Student ID *</label>
+                            <input type="text" id="studentId" name="studentId" required>
+                        </div>
+                        <div class="form-group">
+                            <label>First Name *</label>
+                            <input type="text" id="firstName" name="firstName" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Middle Name</label>
+                            <input type="text" id="middleName" name="middleName">
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name *</label>
+                            <input type="text" id="lastName" name="lastName" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Date of Birth</label>
+                            <input type="date" id="dob" name="dob">
+                        </div>
+
+                    </div>
+
+                    <!-- Column 2 -->
+                    <div class="form-column">
+                        <h3>Academic & Contact</h3>
+                        <div class="form-group">
+                            <label>Course *</label>
+                            <select id="course" name="course" required>
+                                <option value="" disabled selected>Select Course</option>
+                                <optgroup label="College of Arts & Sciences">
+                                    <option value="ABCom">ABCom - Bachelor of Arts in Communication</option>
+                                    <option value="ABEng">ABEng - Bachelor of Arts in English</option>
+                                    <option value="BSM">BSM - Bachelor of Science in Mathematics</option>
+                                    <option value="BSP">BSP - Bachelor of Science in Psychology</option>
+                                </optgroup>
+                                <optgroup label="College of Business & Accountancy">
+                                    <option value="ABA">ABA - Associate in Business Administration</option>
+                                    <option value="BSAIS">BSAIS - Bachelor of Science in Accounting Information System</option>
+                                    <option value="BSA">BSA - Bachelor of Science in Accountancy</option>
+                                    <option value="BSMA">BSMA - Bachelor of Science in Management Accounting</option>
+                                    <option value="BSREM">BSREM - Bachelor of Science in Real Estate Management</option>
+                                    <option value="BSIA">BSIA - Bachelor of Science in Internal Auditing</option>
+                                    <option value="BSLM">BSLM - Bachelor of Science in Legal Management</option>
+                                    <option value="BSBA">BSBA - Bachelor of Science in Business Administration</option>
+                                </optgroup>
+                                <optgroup label="College of Computer Studies">
+                                    <option value="ACT">ACT - Associate in Computer Technology</option>
+                                    <option value="BSCS">BSCS - Bachelor of Science in Computer Science</option>
+                                    <option value="BSIT">BSIT - Bachelor of Science in Information Technology</option>
+                                    <option value="BSIS">BSIS - Bachelor of Science in Information System</option>
+                                </optgroup>
+                                <optgroup label="College of Education">
+                                    <option value="BECEd">BECEd - Bachelor in Early Childhood Education</option>
+                                    <option value="BELEd">BELEd - Bachelor in Elementary Education</option>
+                                    <option value="BSEd">BSEd - Bachelor in Secondary Education</option>
+                                    <option value="BTVTEd">BTVTEd - Bachelor in Technical-Vocational Teacher Education</option>
+                                </optgroup>
+                                <optgroup label="International School of Hospitality & Tourism Management">
+                                    <option value="BSHM">BSHM - Bachelor of Science in Hospitality Management</option>
+                                    <option value="BSTM">BSTM - Bachelor of Science in Tourism Management</option>
+                                </optgroup>
+                                <optgroup label="College of Criminology & Administration">
+                                    <option value="BSC">BSC - Bachelor of Science in Criminology</option>
+                                    <option value="BSISM">BSISM - Bachelor of Science in Industrial Security Management</option>
+                                    <option value="BSPA">BSPA - Bachelor of Science in Public Administration</option>
+                                </optgroup>
+                                <optgroup label="College of Engineering & Digital Technology">
+                                    <option value="BSCpE">BSCpE - Bachelor of Science in Computer Engineering</option>
+                                    <option value="BSECE">BSECE - Bachelor of Science in Electronics Engineering</option>
+                                </optgroup>
+                                <optgroup label="College of Health Sciences">
+                                    <option value="BSMedTech">BSMedTech - Bachelor of Science in Medical Technology</option>
+                                    <option value="BSN">BSN - Bachelor of Science in Nursing</option>
+                                </optgroup>
+                                <optgroup label="Technical-Vocational Programs">
+                                    <option value="DHRM1">DHRM1 - Diploma in Hotel & Restaurant Management-1</option>
+                                    <option value="DHRM2">DHRM2 - Diploma in Hotel & Restaurant Management-2</option>
+                                    <option value="DTMA">DTMA - Diploma in Tourism Management Associate</option>
+                                    <option value="DSDA">DSDA - Diploma in Software Development Associate</option>
+                                    <option value="OCCS">OCCS - Diploma in Consumer Electronics & Computer Hardware Servicing</option>
+                                    <option value="DHWA">DHWA - Diploma in Health Care & Wellness Associate</option>
+                                    <option value="CCG">CCG - Certificate in Professional Caregiving NCII</option>
+                                    <option value="DOSM">DOSM - Diploma in Office System Management</option>
+                                    <option value="DMFT">DMFT - Diploma in Microfinance Technology</option>
+                                </optgroup>
+                                <optgroup label="Senior High School">
+                                    <option value="ABM">ABM - Accountancy, Business & Management</option>
+                                    <option value="STEM">STEM - Science, Technology, Engineering & Mathematics</option>
+                                    <option value="HUMSS">HUMSS - Humanities & Social Sciences</option>
+                                    <option value="GAS">GAS - General Academic Strand</option>
+                                    <option value="ICT">ICT - Information Communication Technology</option>
+                                    <option value="HE">HE - Home Economics</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Year Level</label>
+                            <select id="yearLevel" name="yearLevel" required>
+                                <option value="" disabled selected>Select Year Level</option>
+                                <option value="1">1st Year</option>
+                                <option value="2">2nd Year</option>
+                                <option value="3">3rd Year</option>
+                                <option value="4">4th Year</option>
+                                <option value="5">5th Year</option>
+                                <option value="11">Grade 11 (Senior High)</option>
+                                <option value="12">Grade 12 (Senior High)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Admission Date</label>
+                            <input type="date" id="admissionDate" name="admissionDate">
+                        </div>
+                        <div class="form-group">
+                            <label>Mobile Number</label>
+                            <input type="tel" id="mobileNumber" name="mobileNumber">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="email" name="email">
+                        </div>
+                         <div class="form-group">
+                            <label>Age</label>
+                            <input type="number" id="age" name="age" min="0">
+                        </div>
+                    </div>
+
+                    <!-- Column 3 -->
+                    <div class="form-column">
+                        <h3>Address & Guardian</h3>
+                        <div class="form-group">
+                            <label>Current Address</label>
+                            <textarea id="currentAddress" name="currentAddress" rows="2"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Permanent Address</label>
+                            <textarea id="permanentAddress" name="permanentAddress" rows="2"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Father's Name</label>
+                            <input type="text" id="fatherName" name="fatherName">
+                        </div>
+                        <div class="form-group">
+                            <label>Mother's Name</label>
+                            <input type="text" id="motherName" name="motherName">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+
+    <script src="script.js"></script>
+</body>
+</html>
