@@ -190,8 +190,8 @@ app.post('/api/students', upload.single('photo'), (req, res) => {
     let newStudent = req.body;
     
     // Basic validation
-    if (!newStudent.studentId || !newStudent.firstName || !newStudent.lastName) {
-        return res.status(400).json({ error: 'Student ID, First Name, and Last Name are required' });
+    if (!newStudent.studentId || !newStudent.firstName || !newStudent.lastName || !newStudent.course) {
+        return res.status(400).json({ error: 'Student ID, First Name, Last Name, and Course are required' });
     }
 
     if (newStudent.age && parseInt(newStudent.age) < 0) {

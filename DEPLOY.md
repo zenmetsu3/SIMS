@@ -35,7 +35,7 @@ This document outlines the manual steps to build and deploy the Student Informat
     - Go to your repository on GitHub.
     - Navigate to **Settings** > **Pages**.
     - Ensure the source is set to the `gh-pages` branch.
-    - Visit the provided GitHub Pages URL (e.g., `https://zenmetsu3.github.io/student_impormation_system/`).
+    - Visit the provided GitHub Pages URL (e.g., `https://zenmetsu3.github.io/SIMS/`).
 
 ## Important Note regarding Backend Functionality
 

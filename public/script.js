@@ -1,6 +1,54 @@
 const API_URL = 'http://localhost:3000/api/students';
 const USER_API_URL = 'http://localhost:3000/api/current-user';
 
+// --- Login Logic ---
+async function handleLogin(e) {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    const btn = e.target.querySelector('button');
+    const originalText = btn.innerText;
+
+    // Loading State
+    btn.innerText = 'Signing In...';
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+
+    // Simulate Network Request
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Mock Validation
+    if (email && password) {
+        const loginScreen = document.getElementById('login-screen');
+        loginScreen.style.opacity = '0';
+        loginScreen.style.transition = 'opacity 0.5s ease';
+        
+        setTimeout(() => {
+            loginScreen.style.display = 'none';
+            document.getElementById('app-dashboard').style.display = 'flex';
+        }, 500);
+    } else {
+        alert('Please enter valid credentials.');
+        btn.innerText = originalText;
+        btn.disabled = false;
+        btn.style.opacity = '1';
+    }
+}
+
+function handleLogout() {
+    document.getElementById('app-dashboard').style.display = 'none';
+    const loginScreen = document.getElementById('login-screen');
+    loginScreen.style.display = 'flex';
+    // Small delay to allow display:flex to apply before opacity
+    setTimeout(() => {
+        loginScreen.style.opacity = '1';
+    }, 10);
+    
+    // Reset form
+    document.getElementById('login-email').value = '';
+    document.getElementById('login-password').value = '';
+}
+
 // Default Avatar SVG (Student/Graduate Icon)
 const DEFAULT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2345A29E'%3E%3Cpath d='M12 3L1 9l11 6 9-4.91V17h2V9M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82z'/%3E%3C/svg%3E";
 
@@ -284,3 +332,33 @@ window.onclick = function(event) {
 }
 
 // README Fetch Logic Removed
+
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    
+    sidebar.classList.toggle('active');
+    
+    if (overlay) {
+        if (sidebar.classList.contains('active')) {
+            overlay.style.display = 'block';
+            setTimeout(() => overlay.style.opacity = '1', 10);
+        } else {
+            overlay.style.opacity = '0';
+            setTimeout(() => overlay.style.display = 'none', 300);
+        }
+    }
+}
+
+// Close sidebar when clicking outside on mobile
+document.addEventListener('click', (e) => {
+    const sidebar = document.querySelector('.sidebar');
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    
+    if (window.innerWidth <= 768 && 
+        sidebar.classList.contains('active') && 
+        !sidebar.contains(e.target) && 
+        !toggleBtn.contains(e.target)) {
+        toggleSidebar();
+    }
+});
