@@ -1,0 +1,26 @@
+[
+  {
+    "id": 101,
+    "title": "System Maintenance Scheduled",
+    "content": "The system will undergo maintenance on Saturday, 10:00 PM to 12:00 AM. Please save your work.",
+    "timestamp": "2026-02-24T09:00:00Z",
+    "priority": "high",
+    "author": "IT Department"
+  },
+  {
+    "id": 102,
+    "title": "Enrollment Period Extended",
+    "content": "The enrollment period for the 2nd Semester has been extended until next Friday.",
+    "timestamp": "2026-02-20T14:30:00Z",
+    "priority": "medium",
+    "author": "Registrar"
+  },
+  {
+    "id": 103,
+    "title": "Welcome Freshmen!",
+    "content": "Join us for the welcome party at the Gymnasium this Friday.",
+    "timestamp": "2026-02-15T08:00:00Z",
+    "priority": "low",
+    "author": "Student Council"
+  }
+]

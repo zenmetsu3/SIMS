@@ -1,0 +1,12 @@
+[
+  {
+    "studentId": "UA2023000001",
+    "assignments": [
+      { "id": 1, "name": "IT101 Midterm Project", "score": 95, "maxScore": 100, "date": "2023-10-15", "status": "Graded" },
+      { "id": 2, "name": "IT101 Final Exam", "score": 88, "maxScore": 100, "date": "2023-12-10", "status": "Graded" },
+      { "id": 3, "name": "IT102 Coding Exercise 1", "score": 100, "maxScore": 100, "date": "2024-02-05", "status": "Graded" },
+      { "id": 4, "name": "IT102 Group Project", "score": null, "maxScore": 100, "date": "2024-03-20", "status": "Pending" },
+      { "id": 5, "name": "PE2 Physical Assessment", "score": 45, "maxScore": 50, "date": "2024-01-15", "status": "Graded" }
+    ]
+  }
+]

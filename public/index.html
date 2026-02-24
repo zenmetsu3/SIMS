@@ -28,13 +28,22 @@
                 
                 <form id="login-form" onsubmit="handleLogin(event)">
                     <div class="form-group-login">
-                        <label for="login-email">Email</label>
-                        <input type="email" id="login-email" value="admin@sims.com" placeholder="name@company.com" required>
+                        <label for="login-email">Email or Student ID</label>
+                        <input type="text" id="login-email" value="admin@sims.com" placeholder="name@company.com or ID" required>
+                        <div id="email-error" class="error-message"></div>
                     </div>
                     
                     <div class="form-group-login">
                         <label for="login-password">Password</label>
                         <input type="password" id="login-password" value="admin123" placeholder="••••••••" required>
+                        <div id="password-error" class="error-message"></div>
+                        <div class="show-password-container">
+                            <input type="checkbox" id="show-password">
+                            <label for="show-password">Show password</label>
+                        </div>
+                        <div style="text-align: right; margin-top: 10px;">
+                            <a href="#" onclick="forgotPassword()" style="color: var(--primary-color); font-size: 0.9rem; text-decoration: none;">Forgot Password?</a>
+                        </div>
                     </div>
                     
                     <button type="submit" class="btn-full-width">Sign In</button>
@@ -45,7 +54,7 @@
 
     <div class="container" id="app-dashboard" style="display: none;">
         <!-- Sidebar -->
-        <nav class="sidebar">
+        <nav class="sidebar" id="admin-sidebar">
             <div class="brand">
                 <i class="fas fa-graduation-cap"></i>
                 <h2>SIMS</h2>
@@ -229,6 +238,135 @@
                 </div>
             </section>
             <!-- Project Info Section Removed -->
+        </main>
+    </div>
+
+    <!-- Student Dashboard -->
+    <div class="container" id="student-dashboard" style="display: none;">
+        <nav class="sidebar" id="student-sidebar">
+            <div class="brand">
+                <i class="fas fa-graduation-cap"></i>
+                <h2>My Portal</h2>
+            </div>
+            <ul>
+                <li class="active" onclick="showStudentSection('overview')" tabindex="0" role="button" aria-label="View Profile">
+                    <i class="fas fa-user"></i> Profile
+                </li>
+                <li onclick="showStudentSection('grading-sheet')" tabindex="0" role="button" aria-label="View Grading Sheet">
+                    <i class="fas fa-clipboard-list"></i> Grading Sheet
+                </li>
+                <li onclick="showStudentSection('grades')" tabindex="0" role="button" aria-label="View Semester Grades">
+                    <i class="fas fa-file-alt"></i> Semester Grades
+                </li>
+                <li onclick="showStudentSection('announcements')" tabindex="0" role="button" aria-label="View Announcements">
+                    <i class="fas fa-bullhorn"></i> Announcements
+                </li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <header>
+                <div class="header-left">
+                     <button id="student-sidebar-toggle" onclick="toggleStudentSidebar()">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1 id="student-page-title">Profile</h1>
+                </div>
+                <div class="user-profile">
+                    <div class="user-info">
+                        <span id="student-name-display">Student</span>
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                    <button onclick="handleLogout()" class="btn-logout" title="Sign Out">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </header>
+
+            <section id="student-overview" class="section active">
+                <div class="profile-container">
+                    <div class="profile-sidebar">
+                        <div class="profile-photo-container">
+                             <img id="student-view-photo" src="" alt="Student Photo" class="profile-photo" onerror="handleImageError(this)">
+                        </div>
+                        <h2 id="student-view-fullname">Student Name</h2>
+                        <p id="student-view-id" class="profile-id">#ID</p>
+                    </div>
+                    <div class="profile-details">
+                        <h3>Academic Info</h3>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <label>Course</label>
+                                <span id="student-view-course">-</span>
+                            </div>
+                             <div class="detail-item">
+                                <label>Year Level</label>
+                                <span id="student-view-year">-</span>
+                            </div>
+                             <div class="detail-item">
+                                <label>Email</label>
+                                <span id="student-view-email">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="student-grades" class="section" style="display: none;">
+                <div class="section-header">
+                    <h2>Semester Grade History</h2>
+                </div>
+                <div id="grades-container">
+                    <!-- Grades populated here -->
+                </div>
+            </section>
+
+            <!-- Grading Sheet Section -->
+            <section id="student-grading-sheet" class="section" style="display: none;">
+                <div class="section-header">
+                    <h2>Grading Sheet</h2>
+                </div>
+                
+                <div class="controls">
+                    <div class="search-bar">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="assessmentSearch" placeholder="Search assessments..." onkeyup="filterAssessments()">
+                    </div>
+                    <select id="statusFilter" onchange="filterAssessments()" class="filter-select">
+                        <option value="all">All Status</option>
+                        <option value="Graded">Graded</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Missing">Missing</option>
+                    </select>
+                </div>
+
+                <div class="table-container">
+                    <table id="assessmentTable">
+                        <thead>
+                            <tr>
+                                <th onclick="sortAssessments('name')" style="cursor:pointer;">Assignment <i class="fas fa-sort"></i></th>
+                                <th onclick="sortAssessments('score')" style="cursor:pointer;">Score <i class="fas fa-sort"></i></th>
+                                <th onclick="sortAssessments('date')" style="cursor:pointer;">Date <i class="fas fa-sort"></i></th>
+                                <th onclick="sortAssessments('status')" style="cursor:pointer;">Status <i class="fas fa-sort"></i></th>
+                            </tr>
+                        </thead>
+                        <tbody id="assessmentTableBody">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Announcements Section -->
+            <section id="student-announcements" class="section" style="display: none;">
+                <div class="section-header">
+                    <h2>Announcements</h2>
+                    <button class="btn-secondary" onclick="markAllAnnouncementsRead()">Mark All as Read</button>
+                </div>
+                <div id="announcements-container" class="announcements-list">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
         </main>
     </div>
 

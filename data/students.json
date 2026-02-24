@@ -21,7 +21,80 @@
     "weight": "",
     "asOnDate": "",
     "photo": null,
-    "name": "CHRISTIAN SABADO NARRAL"
+    "name": "CHRISTIAN SABADO NARRAL",
+    "password": "$2b$10$kFrWDQYE0fQV1xR40/ubJur.USuxYtLIOY7gqdlzjiHObBoJc2mcG",
+    "grades": [
+      {
+        "semester": "1st Semester 2023-2024",
+        "courses": [
+          {
+            "code": "IT101",
+            "title": "Introduction to Computing",
+            "units": 3,
+            "grade": "1.25"
+          },
+          {
+            "code": "IT102",
+            "title": "Computer Programming 1",
+            "units": 3,
+            "grade": "1.50"
+          },
+          {
+            "code": "MATH1",
+            "title": "Mathematics in the Modern World",
+            "units": 3,
+            "grade": "1.75"
+          },
+          {
+            "code": "ENG1",
+            "title": "Purposive Communication",
+            "units": 3,
+            "grade": "1.25"
+          },
+          {
+            "code": "PE1",
+            "title": "Physical Fitness",
+            "units": 2,
+            "grade": "1.00"
+          }
+        ]
+      },
+      {
+        "semester": "2nd Semester 2023-2024",
+        "courses": [
+          {
+            "code": "IT103",
+            "title": "Computer Programming 2",
+            "units": 3,
+            "grade": "1.25"
+          },
+          {
+            "code": "IT104",
+            "title": "Data Structures and Algorithms",
+            "units": 3,
+            "grade": "1.50"
+          },
+          {
+            "code": "MATH2",
+            "title": "Discrete Mathematics",
+            "units": 3,
+            "grade": "1.75"
+          },
+          {
+            "code": "FIL1",
+            "title": "Kontekstwalisadong Komunikasyon",
+            "units": 3,
+            "grade": "1.25"
+          },
+          {
+            "code": "PE2",
+            "title": "Rhythmic Activities",
+            "units": 2,
+            "grade": "1.00"
+          }
+        ]
+      }
+    ]
   },
   {
     "studentId": "gds",
@@ -40,6 +113,79 @@
     "fatherName": "CZXCZCZ",
     "motherName": "CZXCXZC",
     "photo": null,
-    "name": "SDFSDF FSFSDF SFSFS"
+    "name": "SDFSDF FSFSDF SFSFS",
+    "password": "$2b$10$GV30ONIOapfVCxqPo.eid.Ky16g5ThiCSI8h93k29mT3dOMGz4VkC",
+    "grades": [
+      {
+        "semester": "1st Semester 2023-2024",
+        "courses": [
+          {
+            "code": "IT101",
+            "title": "Introduction to Computing",
+            "units": 3,
+            "grade": "1.25"
+          },
+          {
+            "code": "IT102",
+            "title": "Computer Programming 1",
+            "units": 3,
+            "grade": "1.50"
+          },
+          {
+            "code": "MATH1",
+            "title": "Mathematics in the Modern World",
+            "units": 3,
+            "grade": "1.75"
+          },
+          {
+            "code": "ENG1",
+            "title": "Purposive Communication",
+            "units": 3,
+            "grade": "1.25"
+          },
+          {
+            "code": "PE1",
+            "title": "Physical Fitness",
+            "units": 2,
+            "grade": "1.00"
+          }
+        ]
+      },
+      {
+        "semester": "2nd Semester 2023-2024",
+        "courses": [
+          {
+            "code": "IT103",
+            "title": "Computer Programming 2",
+            "units": 3,
+            "grade": "1.25"
+          },
+          {
+            "code": "IT104",
+            "title": "Data Structures and Algorithms",
+            "units": 3,
+            "grade": "1.50"
+          },
+          {
+            "code": "MATH2",
+            "title": "Discrete Mathematics",
+            "units": 3,
+            "grade": "1.75"
+          },
+          {
+            "code": "FIL1",
+            "title": "Kontekstwalisadong Komunikasyon",
+            "units": 3,
+            "grade": "1.25"
+          },
+          {
+            "code": "PE2",
+            "title": "Rhythmic Activities",
+            "units": 2,
+            "grade": "1.00"
+          }
+        ]
+      }
+    ]
   }
 ]

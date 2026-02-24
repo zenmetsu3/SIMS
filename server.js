@@ -4,12 +4,17 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = 3000;
+const SECRET_KEY = 'super-secret-key-sims-2026'; // In production, use env var
 const DATA_FILE = path.join(__dirname, 'data', 'students.json');
 const USERS_FILE = path.join(__dirname, 'data', 'users.json');
 const AUDIT_FILE = path.join(__dirname, 'data', 'audit_logs.json');
+const ASSESSMENTS_FILE = path.join(__dirname, 'data', 'assessments.json');
+const ANNOUNCEMENTS_FILE = path.join(__dirname, 'data', 'announcements.json');
 const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
 
 // Multer Config
@@ -86,6 +91,26 @@ const writeAudit = (data) => {
         fs.writeFileSync(AUDIT_FILE, JSON.stringify(data, null, 2));
     } catch (err) {
         console.error("Error writing audit:", err);
+    }
+};
+
+const readAssessments = () => {
+    if (!fs.existsSync(ASSESSMENTS_FILE)) return [];
+    try {
+        return JSON.parse(fs.readFileSync(ASSESSMENTS_FILE, 'utf8'));
+    } catch (err) {
+        console.error("Error reading assessments:", err);
+        return [];
+    }
+};
+
+const readAnnouncements = () => {
+    if (!fs.existsSync(ANNOUNCEMENTS_FILE)) return [];
+    try {
+        return JSON.parse(fs.readFileSync(ANNOUNCEMENTS_FILE, 'utf8'));
+    } catch (err) {
+        console.error("Error reading announcements:", err);
+        return [];
     }
 };
 
@@ -268,13 +293,127 @@ app.delete('/api/students/:id', (req, res) => {
 
 // --- User Management Routes ---
 
-// Get current user (Mock auth: returns first active admin)
-app.get('/api/current-user', (req, res) => {
+// Login Endpoint
+app.post('/api/login', (req, res) => {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email/ID and password are required' });
+    }
+
     const users = readUsers();
-    // In a real app, this would check session/token. 
-    // Here we return the first active admin found, or null.
-    const activeAdmin = users.find(u => u.status === 'active' && u.role === 'admin');
-    res.json(activeAdmin || null);
+    const students = readData();
+
+    // 1. Check Admin Users (by email)
+    const adminUser = users.find(u => u.email === email && u.status === 'active');
+    
+    if (adminUser) {
+        const passwordMatch = bcrypt.compareSync(password, adminUser.password);
+        if (!passwordMatch) {
+            return res.status(401).json({ error: 'wrong password' });
+        }
+        
+        // Generate Token for Admin
+        const token = jwt.sign(
+            { id: adminUser.id, username: adminUser.username, role: 'admin', email: adminUser.email },
+            SECRET_KEY,
+            { expiresIn: '24h' }
+        );
+
+        const { password: _, ...userWithoutPassword } = adminUser;
+        return res.json({ token, user: userWithoutPassword, role: 'admin' });
+    }
+
+    // 2. Check Students (by studentId or email)
+    const studentUser = students.find(s => s.studentId === email || s.email === email);
+
+    if (studentUser) {
+        // Check if student has a password (migrated)
+        if (!studentUser.password) {
+             return res.status(401).json({ error: 'Student account not initialized. Contact admin.' });
+        }
+
+        const passwordMatch = bcrypt.compareSync(password, studentUser.password);
+        if (!passwordMatch) {
+            return res.status(401).json({ error: 'wrong password' });
+        }
+
+        // Generate Token for Student
+        const token = jwt.sign(
+            { id: studentUser.studentId, role: 'student', email: studentUser.email, name: studentUser.name },
+            SECRET_KEY,
+            { expiresIn: '24h' }
+        );
+
+        const { password: _, grades, ...studentWithoutSensitive } = studentUser;
+        return res.json({ token, user: studentWithoutSensitive, role: 'student' });
+    }
+
+    // 3. Not found in either
+    // Timing attack mitigation
+    bcrypt.compareSync(password, '$2b$10$AsEbUuKeBFX5NGE/ezhLu.Bs.Q2U/hdIoMuqTxMwfdwW9T752w/Nm');
+    return res.status(401).json({ error: 'wrong email' });
+});
+
+// Middleware to verify token
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) return res.sendStatus(401);
+
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
+
+// Get current user (Protected) - Handles both Admin and Student
+app.get('/api/current-user', authenticateToken, (req, res) => {
+    if (req.user.role === 'admin') {
+        const users = readUsers();
+        const user = users.find(u => u.email === req.user.email);
+        if (!user || user.status !== 'active') return res.status(404).json({ error: 'User not found' });
+        const { password, ...safeUser } = user;
+        return res.json({ ...safeUser, role: 'admin' });
+    } else if (req.user.role === 'student') {
+        const students = readData();
+        const student = students.find(s => s.studentId === req.user.id);
+        if (!student) return res.status(404).json({ error: 'Student not found' });
+        const { password, grades, ...safeStudent } = student;
+        return res.json({ ...safeStudent, role: 'student' });
+    }
+    res.status(403).json({ error: 'Invalid role' });
+});
+
+// Get Student Grades (Protected)
+app.get('/api/student/grades', authenticateToken, (req, res) => {
+    if (req.user.role !== 'student') {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+    const students = readData();
+    const student = students.find(s => s.studentId === req.user.id);
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+    
+    res.json(student.grades || []);
+});
+
+// Get Student Assessments (Protected)
+app.get('/api/student/assessments', authenticateToken, (req, res) => {
+    if (req.user.role !== 'student') {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+    const assessments = readAssessments();
+    const studentAssessment = assessments.find(a => a.studentId === req.user.id);
+    
+    res.json(studentAssessment ? studentAssessment.assignments : []);
+});
+
+// Get Announcements (Public/Protected)
+app.get('/api/announcements', (req, res) => {
+    const announcements = readAnnouncements();
+    res.json(announcements);
 });
 
 // Soft Delete User (Admin Removal)
