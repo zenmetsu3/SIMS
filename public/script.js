@@ -1,67 +1,153 @@
 const API_URL = 'http://localhost:3000/api/students';
 const USER_API_URL = 'http://localhost:3000/api/current-user';
 const LOGIN_API_URL = 'http://localhost:3000/api/login';
+const LOGIN_ADMIN_URL = 'http://localhost:3000/api/login/admin';
+const LOGIN_STUDENT_URL = 'http://localhost:3000/api/login/student';
+const CSRF_URL = 'http://localhost:3000/api/csrf-token';
+const CAPTCHA_URL = 'http://localhost:3000/api/captcha';
 
-// --- Login Logic ---
-async function handleLogin(e) {
+// --- Role Toggle State ---
+let loginDraft = {
+    admin: { email: '', password: '', dept: '' },
+    student: { id: '', password: '' }
+};
+
+function saveDraft() {
+    sessionStorage.setItem('loginDraft', JSON.stringify(loginDraft));
+}
+
+function loadDraft() {
+    try {
+        const raw = sessionStorage.getItem('loginDraft');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed.admin) loginDraft.admin = parsed.admin;
+            if (parsed.student) loginDraft.student = parsed.student;
+        }
+    } catch {}
+}
+
+function applyDraftToForms() {
+    const a = loginDraft.admin;
+    const s = loginDraft.student;
+    const adminEmail = document.getElementById('admin-email');
+    const adminPass = document.getElementById('admin-password');
+    const adminDept = document.getElementById('admin-dept');
+    const studentId = document.getElementById('student-id');
+    const studentPass = document.getElementById('student-password');
+    if (adminEmail) adminEmail.value = a.email || '';
+    if (adminPass) adminPass.value = a.password || '';
+    if (adminDept) adminDept.value = a.dept || '';
+    if (studentId) studentId.value = s.id || '';
+    if (studentPass) studentPass.value = s.password || '';
+}
+
+function setActiveRole(role) {
+    sessionStorage.setItem('selectedRole', role);
+    const adminBtn = document.getElementById('toggle-admin');
+    const studentBtn = document.getElementById('toggle-student');
+    const adminForm = document.getElementById('admin-form');
+    const studentForm = document.getElementById('student-form');
+    const label = document.getElementById('active-role-label');
+    if (!adminBtn || !studentBtn || !adminForm || !studentForm || !label) return;
+    if (role === 'admin') {
+        adminBtn.classList.add('active');
+        studentBtn.classList.remove('active');
+        adminForm.style.display = '';
+        adminForm.setAttribute('aria-hidden', 'false');
+        studentForm.style.display = 'none';
+        studentForm.setAttribute('aria-hidden', 'true');
+        label.innerHTML = '<i class="fas fa-user-shield"></i> Admin Mode';
+    } else {
+        adminBtn.classList.remove('active');
+        studentBtn.classList.add('active');
+        adminForm.style.display = 'none';
+        adminForm.setAttribute('aria-hidden', 'true');
+        studentForm.style.display = '';
+        studentForm.setAttribute('aria-hidden', 'false');
+        label.innerHTML = '<i class="fas fa-user-graduate"></i> Student Mode';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadDraft();
+    applyDraftToForms();
+    const savedRole = sessionStorage.getItem('selectedRole') || 'admin';
+    setActiveRole(savedRole);
+    const adminBtn = document.getElementById('toggle-admin');
+    const studentBtn = document.getElementById('toggle-student');
+    if (adminBtn) {
+        adminBtn.addEventListener('click', () => {
+            const sId = document.getElementById('student-id').value;
+            const sPass = document.getElementById('student-password').value;
+            loginDraft.student = { id: sId, password: sPass };
+            const aEmail = document.getElementById('admin-email').value;
+            const aPass = document.getElementById('admin-password').value;
+            const aDept = document.getElementById('admin-dept').value;
+            loginDraft.admin = { email: aEmail, password: aPass, dept: aDept };
+            saveDraft();
+            setActiveRole('admin');
+        });
+    }
+    if (studentBtn) {
+        studentBtn.addEventListener('click', () => {
+            const aEmail = document.getElementById('admin-email').value;
+            const aPass = document.getElementById('admin-password').value;
+            const aDept = document.getElementById('admin-dept').value;
+            loginDraft.admin = { email: aEmail, password: aPass, dept: aDept };
+            const sId = document.getElementById('student-id').value;
+            const sPass = document.getElementById('student-password').value;
+            loginDraft.student = { id: sId, password: sPass };
+            saveDraft();
+            setActiveRole('student');
+        });
+    }
+});
+
+// --- Login Logic: Admin ---
+async function handleAdminLogin(e) {
     e.preventDefault();
-    const emailInput = document.getElementById('login-email');
-    const passwordInput = document.getElementById('login-password');
-    const emailError = document.getElementById('email-error');
-    const passwordError = document.getElementById('password-error');
-    
-    const email = emailInput.value;
+    const emailInput = document.getElementById('admin-email');
+    const passwordInput = document.getElementById('admin-password');
+    const deptInput = document.getElementById('admin-dept');
+    const emailError = document.getElementById('admin-email-error');
+    const passwordError = document.getElementById('admin-password-error');
+    const deptError = document.getElementById('admin-dept-error');
+    const email = emailInput.value.trim();
     const password = passwordInput.value;
+    const departmentCode = deptInput.value.trim();
     const btn = e.target.querySelector('button');
     const originalText = btn.innerText;
-
-    // Reset Errors
     emailError.innerText = '';
     passwordError.innerText = '';
+    deptError.innerText = '';
     emailInput.classList.remove('error');
     passwordInput.classList.remove('error');
-
-    // Loading State
+    deptInput.classList.remove('error');
     btn.innerText = 'Signing In...';
     btn.disabled = true;
     btn.style.opacity = '0.7';
-
     try {
-        const response = await fetch(LOGIN_API_URL, {
+        const response = await fetch(LOGIN_ADMIN_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ email, password })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, departmentCode })
         });
-
         const data = await response.json();
-
         if (response.ok) {
-            // Login Success
             localStorage.setItem('token', data.token);
-            localStorage.setItem('role', data.role); // Store Role
-            
+            localStorage.setItem('role', data.role);
             const loginScreen = document.getElementById('login-screen');
             loginScreen.style.opacity = '0';
             loginScreen.style.transition = 'opacity 0.5s ease';
-            
             setTimeout(() => {
                 loginScreen.style.display = 'none';
-                
-                if (data.role === 'student') {
-                    document.getElementById('student-dashboard').style.display = 'flex';
-                    loadStudentDashboard();
-                } else {
-                    document.getElementById('app-dashboard').style.display = 'flex';
-                    fetchUser();
-                    fetchStudents();
-                }
+                document.getElementById('app-dashboard').style.display = 'flex';
+                fetchUser();
+                fetchStudents();
             }, 500);
         } else {
-            // Login Failed - Handle Specific Errors
             const errorMessage = data.error || 'Login failed';
-            
             if (errorMessage === 'wrong email') {
                 emailError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Wrong email';
                 emailInput.classList.add('error');
@@ -70,28 +156,209 @@ async function handleLogin(e) {
                 passwordError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Wrong password';
                 passwordInput.classList.add('error');
                 passwordInput.focus();
+            } else if (errorMessage === 'invalid department code') {
+                deptError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Invalid department code';
+                deptInput.classList.add('error');
+                deptInput.focus();
             } else {
-                // Fallback for other errors
                 alert(errorMessage);
             }
         }
     } catch (err) {
-        alert(err.message || 'An error occurred during login.');
+        alert(err.message || 'An error occurred during admin login.');
     } finally {
-        // Reset Button State
         btn.innerText = originalText;
         btn.disabled = false;
         btn.style.opacity = '1';
+        loginDraft.admin = { email, password, dept: departmentCode };
+        saveDraft();
+    }
+}
+
+// --- Login Logic: Student ---
+async function handleStudentLogin(e) {
+    e.preventDefault();
+    const idInput = document.getElementById('student-id');
+    const passwordInput = document.getElementById('student-password');
+    const idError = document.getElementById('student-id-error');
+    const passwordError = document.getElementById('student-password-error');
+    const remember = document.getElementById('student-remember');
+    const submitBtn = document.getElementById('student-submit-btn');
+    const captchaWrap = document.getElementById('student-captcha');
+    const captchaText = document.getElementById('captcha-text');
+    const captchaAnswerEl = document.getElementById('captcha-answer');
+    const email = idInput.value.trim();
+    const password = passwordInput.value;
+    const btn = submitBtn;
+    const originalText = btn.querySelector('.btn-text').innerText;
+    idError.innerText = '';
+    passwordError.innerText = '';
+    idInput.classList.remove('error');
+    passwordInput.classList.remove('error');
+    idInput.setAttribute('aria-invalid', 'false');
+    passwordInput.setAttribute('aria-invalid', 'false');
+    btn.querySelector('.btn-text').innerText = 'Signing In...';
+    btn.classList.add('loading');
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+    const emailValid = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$/.test(email) || /^[A-Za-z0-9-]+$/.test(email);
+    if (!email || !emailValid) {
+        idError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Enter a valid email or ID';
+        idInput.classList.add('error');
+        idInput.setAttribute('aria-invalid', 'true');
+        btn.querySelector('.btn-text').innerText = originalText;
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        return;
+    }
+    if (!password) {
+        passwordError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Enter your password';
+        passwordInput.classList.add('error');
+        passwordInput.setAttribute('aria-invalid', 'true');
+        btn.querySelector('.btn-text').innerText = originalText;
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        return;
+    }
+    try {
+        const csrf = await ensureCsrf();
+        const body = { email, password };
+        const visibleCaptcha = captchaWrap.style.display !== 'none';
+        if (visibleCaptcha) {
+            const t = sessionStorage.getItem('captchaToken');
+            const ans = captchaAnswerEl.value.trim();
+            if (t && ans) {
+                body.captchaToken = t;
+                body.captchaAnswer = ans;
+            }
+        }
+        const response = await fetch(LOGIN_STUDENT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(csrf ? { 'x-csrf-token': csrf } : {}) },
+            credentials: 'include',
+            body: JSON.stringify(body)
+        });
+        const data = await response.json();
+        if (response.ok) {
+            if (remember && remember.checked) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('role', data.role);
+            } else {
+                sessionStorage.setItem('token', data.token);
+                sessionStorage.setItem('role', data.role);
+            }
+            const loginScreen = document.getElementById('login-screen');
+            loginScreen.style.opacity = '0';
+            loginScreen.style.transition = 'opacity 0.5s ease';
+            setTimeout(() => {
+                loginScreen.style.display = 'none';
+                document.getElementById('student-dashboard').style.display = 'flex';
+                loadStudentDashboard();
+            }, 500);
+        } else {
+            const errorMessage = data.error || 'Login failed';
+            if (errorMessage === 'wrong email') {
+                idError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Wrong ID or email';
+                idInput.classList.add('error');
+                idInput.focus();
+            } else if (errorMessage === 'wrong password') {
+                passwordError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Wrong password';
+                passwordInput.classList.add('error');
+                passwordInput.focus();
+            } else if (errorMessage === 'account not initialized') {
+                idError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Account not initialized. Contact admin.';
+                idInput.classList.add('error');
+            } else if (errorMessage === 'captcha required' || data.captchaRequired) {
+                captchaWrap.style.display = '';
+                try {
+                    const c = await fetch('http://localhost:3000/api/captcha', { credentials: 'include' });
+                    if (c.ok) {
+                        const cj = await c.json();
+                        sessionStorage.setItem('captchaToken', cj.token);
+                        captchaText.innerText = cj.text;
+                        captchaAnswerEl.value = '';
+                        document.getElementById('captcha-error').innerText = '';
+                    }
+                } catch {}
+            } else if (errorMessage === 'captcha invalid') {
+                document.getElementById('captcha-error').innerHTML = '<i class="fas fa-exclamation-circle"></i> Incorrect answer';
+                captchaAnswerEl.classList.add('error');
+                captchaAnswerEl.focus();
+            } else if (response.status === 429) {
+                idError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Too many attempts. Please try again later.';
+                captchaWrap.style.display = '';
+            } else {
+                alert(errorMessage);
+            }
+        }
+    } catch (err) {
+        alert(err.message || 'An error occurred during student login.');
+    } finally {
+        btn.querySelector('.btn-text').innerText = originalText;
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        loginDraft.student = { id: email, password };
+        saveDraft();
     }
 }
 
 // Toggle Password Visibility
-document.getElementById('show-password').addEventListener('change', function() {
-    const passwordInput = document.getElementById('login-password');
-    if (this.checked) {
-        passwordInput.type = 'text';
-    } else {
-        passwordInput.type = 'password';
+document.addEventListener('DOMContentLoaded', () => {
+    const showAdmin = document.getElementById('show-admin-password');
+    if (showAdmin) {
+        showAdmin.addEventListener('change', function() {
+            const passwordInput = document.getElementById('admin-password');
+            passwordInput.type = this.checked ? 'text' : 'password';
+        });
+    }
+    const showStudent = document.getElementById('show-student-password');
+    if (showStudent) {
+        showStudent.addEventListener('change', function() {
+            const passwordInput = document.getElementById('student-password');
+            passwordInput.type = this.checked ? 'text' : 'password';
+        });
+    }
+    const regLink = document.getElementById('student-register-link');
+    const regModal = document.getElementById('registerModal');
+    const regClose = document.getElementById('registerClose');
+    const regCancel = document.getElementById('registerCancel');
+    const regForm = document.getElementById('registerForm');
+    if (regLink && regModal) {
+        regLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            regModal.style.display = 'flex';
+        });
+    }
+    if (regClose) regClose.addEventListener('click', () => regModal.style.display = 'none');
+    if (regCancel) regCancel.addEventListener('click', () => regModal.style.display = 'none');
+    if (regForm) {
+        const pw = document.getElementById('reg-password');
+        const bar = document.getElementById('strength-bar');
+        const text = document.getElementById('strength-text');
+        const calcStrength = (v) => {
+            let score = 0;
+            if (v.length >= 8) score++;
+            if (/[A-Z]/.test(v)) score++;
+            if (/[a-z]/.test(v)) score++;
+            if (/[0-9]/.test(v)) score++;
+            if (/[^A-Za-z0-9]/.test(v)) score++;
+            return score;
+        };
+        pw.addEventListener('input', () => {
+            const s = calcStrength(pw.value);
+            const pct = (s / 5) * 100;
+            bar.style.width = pct + '%';
+            if (s <= 2) { bar.style.background = '#ff4d4d'; text.textContent = 'Weak'; }
+            else if (s === 3) { bar.style.background = '#ffcc00'; text.textContent = 'Medium'; }
+            else { bar.style.background = '#2ecc71'; text.textContent = 'Strong'; }
+        });
+        regForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            alert('Registration requires backend integration.');
+        });
     }
 });
 
@@ -117,12 +384,11 @@ const totalStudentsEl = document.getElementById('total-students');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('role');
-
+    ensureCsrf();
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const role = localStorage.getItem('role') || sessionStorage.getItem('role');
     if (token) {
         document.getElementById('login-screen').style.display = 'none';
-        
         if (role === 'student') {
             document.getElementById('student-dashboard').style.display = 'flex';
             loadStudentDashboard();
@@ -148,20 +414,50 @@ function handleLogout() {
     }, 10);
     
     // Reset form
-    document.getElementById('login-email').value = '';
-    document.getElementById('login-password').value = '';
+    const adminEmail = document.getElementById('admin-email');
+    const adminPassword = document.getElementById('admin-password');
+    const adminDept = document.getElementById('admin-dept');
+    const studentId = document.getElementById('student-id');
+    const studentPassword = document.getElementById('student-password');
+    if (adminEmail) adminEmail.value = '';
+    if (adminPassword) adminPassword.value = '';
+    if (adminDept) adminDept.value = '';
+    if (studentId) studentId.value = '';
+    if (studentPassword) studentPassword.value = '';
+    sessionStorage.removeItem('loginDraft');
+    sessionStorage.removeItem('selectedRole');
     
     // Clear errors
-    document.getElementById('email-error').innerText = '';
-    document.getElementById('password-error').innerText = '';
-    document.getElementById('login-email').classList.remove('error');
-    document.getElementById('login-password').classList.remove('error');
+    const errorIds = ['admin-email-error','admin-password-error','admin-dept-error','student-id-error','student-password-error'];
+    errorIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = '';
+    });
+    ['admin-email','admin-password','admin-dept','student-id','student-password'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('error');
+    });
 }
 function getAuthHeaders() {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     return token ? { 'Authorization': `Bearer ${token}` } : {};
 }
 
+async function ensureCsrf() {
+    try {
+        const existing = sessionStorage.getItem('csrfToken');
+        if (existing) return existing;
+        const res = await fetch(CSRF_URL, { credentials: 'include' });
+        if (res.ok) {
+            const data = await res.json();
+            sessionStorage.setItem('csrfToken', data.token);
+            return data.token;
+        }
+    } catch {}
+    return null;
+}
+
+// (Removed obsolete Quick Panel functions)
 // Fetch User
 async function fetchUser() {
     try {
@@ -192,6 +488,150 @@ async function fetchUser() {
         console.error('Error fetching user:', err);
         return false;
     }
+}
+
+function renderAnnouncementsTo(containerId, data) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    if (!Array.isArray(data) || data.length === 0) {
+        container.innerHTML = '<p style="text-align:center; color:var(--text-color);">No announcements.</p>';
+        return;
+    }
+    const items = [...data].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    items.forEach(ann => {
+        const dateStr = new Date(ann.timestamp).toLocaleString();
+        const pri = (ann.priority || 'low').toLowerCase();
+        const card = document.createElement('div');
+        card.className = 'announcement-card';
+        card.innerHTML = `
+            <div class="announcement-header">
+                <span class="badge badge-${pri}">${pri}</span>
+                <div class="announcement-meta">
+                    <span>${ann.author || 'System'}</span>
+                    <span>${dateStr}</span>
+                </div>
+            </div>
+            <div class="announcement-title">${ann.title}</div>
+            <div class="announcement-content">${(ann.content || '').replace(/\\n/g,'<br>')}</div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+async function initAdminAnnouncements() {
+    try {
+        const res = await fetch('http://localhost:3000/api/announcements', { headers: getAuthHeaders() });
+        if (res.ok) {
+            const data = await res.json();
+            renderAnnouncementsTo('admin-announcements-list', data);
+        }
+    } catch {}
+}
+
+async function initAdminTerm(term) {
+    try {
+        const res = await fetch(API_URL, { headers: getAuthHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const bodyId = `${term}-body`;
+        const totalId = `${term}-total`;
+        const subId = `${term}-submitted`;
+        const missId = `${term}-missing`;
+        const nameId = `${term}-name`;
+        const maxId = `${term}-max`;
+        const dateId = `${term}-date`;
+        const tbody = document.getElementById(bodyId);
+        const totalEl = document.getElementById(totalId);
+        const submittedEl = document.getElementById(subId);
+        const missingEl = document.getElementById(missId);
+        tbody.innerHTML = '';
+        let submitted = 0;
+        let missing = 0;
+        const aname = document.getElementById(nameId).value.trim();
+        const amax = parseFloat(document.getElementById(maxId).value);
+        data.forEach(st => {
+            const tr = document.createElement('tr');
+            const statusId = `${term}-status-${st.studentId}`;
+            const scoreId = `${term}-score-${st.studentId}`;
+            tr.innerHTML = `
+                <td>${st.studentId}</td>
+                <td>${st.name || (st.firstName + ' ' + st.lastName)}</td>
+                <td>
+                    <select id="${statusId}" aria-label="Submission status for ${st.studentId}">
+                        <option value="Pending">Pending</option>
+                        <option value="Submitted">Submitted</option>
+                        <option value="Missing">Missing</option>
+                    </select>
+                </td>
+                <td>
+                    <input id="${scoreId}" type="number" min="0" ${isFinite(amax) ? `max="${amax}"` : ''} step="0.01" inputmode="decimal" aria-label="Score for ${st.studentId}">
+                </td>
+                <td id="${term}-pct-${st.studentId}">-</td>
+                <td>
+                    <button class="btn-primary" aria-label="Save grade for ${st.studentId}" data-id="${st.studentId}">Save</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+            const select = tr.querySelector(`#${statusId}`);
+            const input = tr.querySelector(`#${scoreId}`);
+            const pctCell = tr.querySelector(`#${term}-pct-${st.studentId}`);
+            const calc = () => {
+                const v = parseFloat(input.value);
+                if (isFinite(amax) && isFinite(v)) {
+                    const pct = Math.max(0, Math.min(100, (v / amax) * 100));
+                    pctCell.textContent = pct.toFixed(1) + '%';
+                } else {
+                    pctCell.textContent = '-';
+                }
+            };
+            input.addEventListener('input', calc);
+            select.addEventListener('change', () => {
+                if (select.value === 'Submitted') submitted++;
+                if (select.value === 'Missing') missing++;
+                submittedEl.textContent = `${submitted} submitted`;
+                missingEl.textContent = `${missing} missing`;
+            });
+        });
+        totalEl.textContent = `${data.length} students`;
+        tbody.querySelectorAll('button.btn-primary').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const studentId = e.currentTarget.getAttribute('data-id');
+                const name = document.getElementById(nameId).value.trim();
+                const maxScore = parseFloat(document.getElementById(maxId).value);
+                const date = document.getElementById(dateId).value || new Date().toISOString().slice(0,10);
+                const scoreInput = document.getElementById(`${term}-score-${studentId}`);
+                const statusSelect = document.getElementById(`${term}-status-${studentId}`);
+                const rawScore = scoreInput.value;
+                if (!name || !isFinite(maxScore)) {
+                    alert('Provide assignment name and max score.');
+                    return;
+                }
+                const payload = {
+                    assignment: {
+                        name,
+                        maxScore,
+                        date,
+                        term,
+                        status: statusSelect.value,
+                        score: rawScore === '' ? null : parseFloat(rawScore)
+                    }
+                };
+                try {
+                    const resp = await fetch(`http://localhost:3000/api/admin/assessments/${studentId}`, {
+                        method: 'PUT',
+                        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!resp.ok) throw new Error('Save failed');
+                    e.currentTarget.textContent = 'Saved';
+                    setTimeout(() => e.currentTarget.textContent = 'Save', 1200);
+                } catch {
+                    alert('Failed to save grade.');
+                }
+            });
+        });
+    } catch {}
 }
 
 // Fetch Data

@@ -6,6 +6,7 @@ const path = require('path');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = 3000;
@@ -34,6 +35,83 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true })); // For form data if needed
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.enable('trust proxy');
+app.use((req, res, next) => {
+    if (process.env.NODE_ENV === 'production') {
+        const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+        if (proto !== 'https') {
+            return res.redirect('https://' + req.headers.host + req.url);
+        }
+    }
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+});
+
+// Auth Middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.sendStatus(401);
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
+
+const allowRole = (role) => (req, res, next) => {
+    if (!req.user || req.user.role !== role) {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+    next();
+};
+
+const parseCookies = (req) => {
+    const header = req.headers.cookie || '';
+    const pairs = header.split(';').map(s => s.trim()).filter(Boolean);
+    const obj = {};
+    for (const p of pairs) {
+        const idx = p.indexOf('=');
+        if (idx > -1) obj[p.slice(0, idx)] = decodeURIComponent(p.slice(idx + 1));
+    }
+    return obj;
+};
+
+const loginAttempts = new Map();
+const captchaChallenges = new Map();
+
+app.get('/api/csrf-token', (req, res) => {
+    const token = crypto.randomBytes(16).toString('hex');
+    const opts = { httpOnly: false, sameSite: 'lax', path: '/' };
+    if (process.env.NODE_ENV === 'production') opts.secure = true;
+    res.cookie('XSRF-TOKEN', token, opts);
+    res.json({ token });
+});
+
+app.get('/api/captcha', (req, res) => {
+    const a = Math.floor(Math.random() * 9) + 1;
+    const b = Math.floor(Math.random() * 9) + 1;
+    const text = `${a} + ${b} = ?`;
+    const token = crypto.randomBytes(12).toString('hex');
+    const expires = Date.now() + 5 * 60 * 1000;
+    captchaChallenges.set(token, { answer: String(a + b), expires });
+    res.json({ token, text });
+});
+
+const requireCsrf = (req) => {
+    const header = req.headers['x-csrf-token'];
+    const cookies = parseCookies(req);
+    const cookie = cookies['XSRF-TOKEN'];
+    return header && cookie && header === cookie;
+};
+
+const ipKey = (req) => {
+    const xf = req.headers['x-forwarded-for'];
+    return Array.isArray(xf) ? xf[0] : (xf ? xf.split(',')[0] : req.ip);
+};
 
 // Helper functions
 const readData = () => {
@@ -186,14 +264,14 @@ const cleanStudent = (student) => {
 // API Routes
 
 // Get all students
-app.get('/api/students', (req, res) => {
+app.get('/api/students', authenticateToken, allowRole('admin'), (req, res) => {
     const students = readData();
     const cleaned = students.map(cleanStudent);
     res.json(cleaned);
 });
 
 // Search students
-app.get('/api/students/search', (req, res) => {
+app.get('/api/students/search', authenticateToken, allowRole('admin'), (req, res) => {
     const { query } = req.query;
     const students = readData();
     if (!query) {
@@ -211,7 +289,7 @@ app.get('/api/students/search', (req, res) => {
 });
 
 // Add student
-app.post('/api/students', upload.single('photo'), (req, res) => {
+app.post('/api/students', authenticateToken, allowRole('admin'), upload.single('photo'), (req, res) => {
     let newStudent = req.body;
     
     // Basic validation
@@ -244,7 +322,7 @@ app.post('/api/students', upload.single('photo'), (req, res) => {
 });
 
 // Update student
-app.put('/api/students/:id', upload.single('photo'), (req, res) => {
+app.put('/api/students/:id', authenticateToken, allowRole('admin'), upload.single('photo'), (req, res) => {
     const { id } = req.params;
     let updates = req.body;
     
@@ -277,7 +355,7 @@ app.put('/api/students/:id', upload.single('photo'), (req, res) => {
 // app.post('/api/students/:id/enrollment', (req, res) => { ... });
 
 // Delete student
-app.delete('/api/students/:id', (req, res) => {
+app.delete('/api/students/:id', authenticateToken, allowRole('admin'), (req, res) => {
     const { id } = req.params;
     let students = readData();
     const initialLength = students.length;
@@ -289,6 +367,37 @@ app.delete('/api/students/:id', (req, res) => {
     
     writeData(students);
     res.json({ message: 'Student deleted successfully' });
+});
+
+app.get('/api/admin/assessments', authenticateToken, allowRole('admin'), (req, res) => {
+    const assessments = readAssessments();
+    res.json(assessments);
+});
+
+app.put('/api/admin/assessments/:studentId', authenticateToken, allowRole('admin'), (req, res) => {
+    const { studentId } = req.params;
+    const { assignment } = req.body;
+    if (!assignment || !assignment.name || assignment.maxScore === undefined) {
+        return res.status(400).json({ error: 'Invalid assignment payload' });
+    }
+    const assessments = readAssessments();
+    let entry = assessments.find(a => a.studentId === studentId);
+    if (!entry) {
+        entry = { studentId, assignments: [] };
+        assessments.push(entry);
+    }
+    if (!assignment.id) {
+        const maxId = entry.assignments.reduce((m, a) => Math.max(m, a.id || 0), 0);
+        assignment.id = maxId + 1;
+    }
+    const idx = entry.assignments.findIndex(a => a.id === assignment.id);
+    if (idx >= 0) {
+        entry.assignments[idx] = { ...entry.assignments[idx], ...assignment };
+    } else {
+        entry.assignments.push(assignment);
+    }
+    fs.writeFileSync(ASSESSMENTS_FILE, JSON.stringify(assessments, null, 2));
+    res.json({ message: 'Updated', assignment });
 });
 
 // --- User Management Routes ---
@@ -355,19 +464,99 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: 'wrong email' });
 });
 
-// Middleware to verify token
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+// Admin Login Endpoint
+app.post('/api/login/admin', (req, res) => {
+    const { email, password, departmentCode } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password are required' });
+    }
+    const users = readUsers();
+    const adminUser = users.find(u => u.email === email && u.status === 'active');
+    if (!adminUser) {
+        bcrypt.compareSync(password, '$2b$10$AsEbUuKeBFX5NGE/ezhLu.Bs.Q2U/hdIoMuqTxMwfdwW9T752w/Nm');
+        return res.status(401).json({ error: 'wrong email' });
+    }
+    const passwordMatch = bcrypt.compareSync(password, adminUser.password);
+    if (!passwordMatch) {
+        return res.status(401).json({ error: 'wrong password' });
+    }
+    const requiredDeptCode = process.env.ADMIN_DEPT_CODE;
+    if (requiredDeptCode) {
+        if (!departmentCode || departmentCode !== requiredDeptCode) {
+            return res.status(401).json({ error: 'invalid department code' });
+        }
+    }
+    const token = jwt.sign(
+        { id: adminUser.id, username: adminUser.username, role: 'admin', email: adminUser.email },
+        SECRET_KEY,
+        { expiresIn: '24h' }
+    );
+    const { password: _, ...userWithoutPassword } = adminUser;
+    return res.json({ token, user: userWithoutPassword, role: 'admin' });
+});
 
-    if (!token) return res.sendStatus(401);
+// Student Login Endpoint
+app.post('/api/login/student', (req, res) => {
+    if (!requireCsrf(req)) {
+        return res.status(403).json({ error: 'csrf invalid' });
+    }
+    const { email, password, captchaToken, captchaAnswer } = req.body || {};
+    const key = ipKey(req);
+    const now = Date.now();
+    const record = loginAttempts.get(key) || { count: 0, ts: now, blockedUntil: 0 };
+    if (record.blockedUntil && now < record.blockedUntil) {
+        return res.status(429).json({ error: 'too many attempts', captchaRequired: true });
+    }
+    const needsCaptcha = record.count >= 3;
+    if (needsCaptcha) {
+        if (!captchaToken || !captchaAnswer) {
+            return res.status(400).json({ error: 'captcha required', captchaRequired: true });
+        }
+        const ch = captchaChallenges.get(captchaToken);
+        if (!ch || now > ch.expires || ch.answer !== String(captchaAnswer).trim()) {
+            return res.status(400).json({ error: 'captcha invalid', captchaRequired: true });
+        }
+        captchaChallenges.delete(captchaToken);
+    }
+    if (!email || !password) {
+        return res.status(400).json({ error: 'ID/Email and password are required' });
+    }
+    if (String(email).length > 120 || String(password).length > 120) {
+        return res.status(400).json({ error: 'invalid input' });
+    }
+    if (!email || !password) {
+        return res.status(400).json({ error: 'ID/Email and password are required' });
+    }
+    const students = readData();
+    const studentUser = students.find(s => s.studentId === email || s.email === email);
+    if (!studentUser) {
+        bcrypt.compareSync(password, '$2b$10$AsEbUuKeBFX5NGE/ezhLu.Bs.Q2U/hdIoMuqTxMwfdwW9T752w/Nm');
+        record.count += 1;
+        if (record.count >= 6) record.blockedUntil = now + 15 * 60 * 1000;
+        loginAttempts.set(key, record);
+        return res.status(401).json({ error: 'wrong email', captchaRequired: record.count >= 3 });
+    }
+    if (!studentUser.password) {
+        return res.status(401).json({ error: 'account not initialized', captchaRequired: record.count >= 3 });
+    }
+    const passwordMatch = bcrypt.compareSync(password, studentUser.password);
+    if (!passwordMatch) {
+        record.count += 1;
+        if (record.count >= 6) record.blockedUntil = now + 15 * 60 * 1000;
+        loginAttempts.set(key, record);
+        return res.status(401).json({ error: 'wrong password', captchaRequired: record.count >= 3 });
+    }
+    loginAttempts.delete(key);
+    const token = jwt.sign(
+        { id: studentUser.studentId, role: 'student', email: studentUser.email, name: studentUser.name },
+        SECRET_KEY,
+        { expiresIn: '24h' }
+    );
+    const { password: _, grades, ...studentWithoutSensitive } = studentUser;
+    return res.json({ token, user: studentWithoutSensitive, role: 'student' });
+});
 
-    jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) return res.sendStatus(403);
-        req.user = user;
-        next();
-    });
-};
+
 
 // Get current user (Protected) - Handles both Admin and Student
 app.get('/api/current-user', authenticateToken, (req, res) => {
@@ -388,10 +577,7 @@ app.get('/api/current-user', authenticateToken, (req, res) => {
 });
 
 // Get Student Grades (Protected)
-app.get('/api/student/grades', authenticateToken, (req, res) => {
-    if (req.user.role !== 'student') {
-        return res.status(403).json({ error: 'Access denied' });
-    }
+app.get('/api/student/grades', authenticateToken, allowRole('student'), (req, res) => {
     const students = readData();
     const student = students.find(s => s.studentId === req.user.id);
     if (!student) return res.status(404).json({ error: 'Student not found' });
@@ -400,10 +586,7 @@ app.get('/api/student/grades', authenticateToken, (req, res) => {
 });
 
 // Get Student Assessments (Protected)
-app.get('/api/student/assessments', authenticateToken, (req, res) => {
-    if (req.user.role !== 'student') {
-        return res.status(403).json({ error: 'Access denied' });
-    }
+app.get('/api/student/assessments', authenticateToken, allowRole('student'), (req, res) => {
     const assessments = readAssessments();
     const studentAssessment = assessments.find(a => a.studentId === req.user.id);
     

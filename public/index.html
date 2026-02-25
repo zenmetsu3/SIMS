@@ -23,30 +23,80 @@
             <div class="login-card">
                 <div class="card-header">
                     <h2>Sign In</h2>
-                    <p>Enter your credentials or use a demo account</p>
+                    <p>Choose a role and enter your credentials</p>
                 </div>
                 
-                <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="role-toggle" role="tablist" aria-label="Login role selector">
+                    <button id="toggle-admin" class="role-btn active" role="tab" aria-selected="true" aria-controls="admin-form" tabindex="0">
+                        <i class="fas fa-user-shield"></i> Admin
+                    </button>
+                    <button id="toggle-student" class="role-btn" role="tab" aria-selected="false" aria-controls="student-form" tabindex="0">
+                        <i class="fas fa-user-graduate"></i> Student
+                    </button>
+                </div>
+                
+                <div class="active-role-indicator">
+                    <span id="active-role-label"><i class="fas fa-user-shield"></i> Admin Mode</span>
+                </div>
+                
+                <form id="admin-form" class="login-form" onsubmit="handleAdminLogin(event)" aria-hidden="false">
                     <div class="form-group-login">
-                        <label for="login-email">Email or Student ID</label>
-                        <input type="text" id="login-email" value="admin@sims.com" placeholder="name@company.com or ID" required>
-                        <div id="email-error" class="error-message"></div>
+                        <label for="admin-email">Email</label>
+                        <input type="email" id="admin-email" placeholder="admin@sims.com" required>
+                        <div id="admin-email-error" class="error-message"></div>
                     </div>
-                    
                     <div class="form-group-login">
-                        <label for="login-password">Password</label>
-                        <input type="password" id="login-password" value="admin123" placeholder="••••••••" required>
-                        <div id="password-error" class="error-message"></div>
+                        <label for="admin-password">Password</label>
+                        <input type="password" id="admin-password" placeholder="••••••••" required>
+                        <div id="admin-password-error" class="error-message"></div>
                         <div class="show-password-container">
-                            <input type="checkbox" id="show-password">
-                            <label for="show-password">Show password</label>
+                            <input type="checkbox" id="show-admin-password">
+                            <label for="show-admin-password">Show password</label>
+                        </div>
+                    </div>
+                    <div class="form-group-login">
+                        <label for="admin-dept">Department Code</label>
+                        <input type="text" id="admin-dept" placeholder="e.g., ITD-2026">
+                        <div id="admin-dept-error" class="error-message"></div>
+                    </div>
+                    <button type="submit" class="btn-full-width">Sign In as Admin</button>
+                </form>
+                
+                <form id="student-form" class="login-form" onsubmit="handleStudentLogin(event)" style="display:none;" aria-hidden="true" aria-describedby="student-form-errors">
+                    <div class="form-group-login">
+                        <label for="student-id">Email or Student ID</label>
+                        <input type="text" id="student-id" placeholder="name@school.edu or ID">
+                        <div id="student-id-error" class="error-message" aria-live="polite"></div>
+                    </div>
+                    <div class="form-group-login">
+                        <label for="student-password">Password</label>
+                        <input type="password" id="student-password" placeholder="••••••••">
+                        <div id="student-password-error" class="error-message" aria-live="polite"></div>
+                        <div class="show-password-container">
+                            <input type="checkbox" id="show-student-password">
+                            <label for="show-student-password">Show password</label>
                         </div>
                         <div style="text-align: right; margin-top: 10px;">
                             <a href="#" onclick="forgotPassword()" style="color: var(--primary-color); font-size: 0.9rem; text-decoration: none;">Forgot Password?</a>
                         </div>
                     </div>
-                    
-                    <button type="submit" class="btn-full-width">Sign In</button>
+                    <div class="form-row-inline">
+                        <label class="checkbox">
+                            <input type="checkbox" id="student-remember"> Remember Me
+                        </label>
+                        <a href="#" id="student-register-link" class="link-secondary">Create New Account</a>
+                    </div>
+                    <div id="student-captcha" class="captcha-container" style="display:none;">
+                        <div class="captcha-row">
+                            <span id="captcha-text"></span>
+                            <input type="text" id="captcha-answer" placeholder="Answer" inputmode="numeric" aria-label="Captcha answer">
+                        </div>
+                        <div id="captcha-error" class="error-message" aria-live="polite"></div>
+                    </div>
+                    <button type="submit" class="btn-full-width" id="student-submit-btn">
+                        <span class="btn-text">Sign In as Student</span>
+                        <span class="spinner" aria-hidden="true"></span>
+                    </button>
                 </form>
             </div>
         </div>
@@ -60,8 +110,10 @@
                 <h2>SIMS</h2>
             </div>
             <ul>
-                <li class="active" onclick="showSection('dashboard')"><i class="fas fa-home"></i> Dashboard</li>
-                <li onclick="showSection('students')"><i class="fas fa-users"></i> Students</li>
+                <li class="active" onclick="showSection('dashboard')" tabindex="0" role="button" aria-label="Overview"><i class="fas fa-home"></i> Dashboard</li>
+                <li onclick="showSection('students')" tabindex="0" role="button" aria-label="Students"><i class="fas fa-users"></i> Students</li>
+                <li onclick="showSection('admin-grading'); initAdminTerm('prelim'); initAdminTerm('midterm'); initAdminTerm('final')" tabindex="0" role="button" aria-label="Grading Sheet"><i class="fas fa-clipboard-check"></i> Grading Sheet</li>
+                <li onclick="showSection('admin-announcements'); initAdminAnnouncements()" tabindex="0" role="button" aria-label="Announcements"><i class="fas fa-bullhorn"></i> Announcements</li>
             </ul>
         </nav>
 
@@ -237,6 +289,119 @@
                     </div>
                 </div>
             </section>
+            
+            <!-- Admin Grading Sheet -->
+            <section id="admin-grading" class="section" style="display:none;">
+                <div class="section-header">
+                    <h2>Grading Sheet</h2>
+                </div>
+                <div class="term-grid">
+                    <div class="term-card term-prelim">
+                        <div class="term-header">
+                            <i class="fas fa-seedling"></i>
+                            <h3>Prelims</h3>
+                        </div>
+                        <div class="controls compact">
+                            <input id="prelim-name" type="text" placeholder="Assignment name" aria-label="Assignment name">
+                            <input id="prelim-max" type="number" min="1" placeholder="Max" aria-label="Max score">
+                            <input id="prelim-date" type="date" aria-label="Due date">
+                            <button class="btn-primary" onclick="initAdminTerm('prelim')" aria-label="Refresh prelim"><i class="fas fa-sync"></i></button>
+                        </div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Name</th>
+                                        <th>Status</th>
+                                        <th>Score</th>
+                                        <th>%</th>
+                                        <th>Save</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="prelim-body"></tbody>
+                            </table>
+                        </div>
+                        <div class="fab-summary">
+                            <span id="prelim-total">0 students</span>
+                            <span id="prelim-submitted">0 submitted</span>
+                            <span id="prelim-missing">0 missing</span>
+                        </div>
+                    </div>
+                    <div class="term-card term-mid">
+                        <div class="term-header">
+                            <i class="fas fa-road"></i>
+                            <h3>Mid-Terms</h3>
+                        </div>
+                        <div class="controls compact">
+                            <input id="midterm-name" type="text" placeholder="Assignment name" aria-label="Assignment name">
+                            <input id="midterm-max" type="number" min="1" placeholder="Max" aria-label="Max score">
+                            <input id="midterm-date" type="date" aria-label="Due date">
+                            <button class="btn-primary" onclick="initAdminTerm('midterm')" aria-label="Refresh midterms"><i class="fas fa-sync"></i></button>
+                        </div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Name</th>
+                                        <th>Status</th>
+                                        <th>Score</th>
+                                        <th>%</th>
+                                        <th>Save</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="midterm-body"></tbody>
+                            </table>
+                        </div>
+                        <div class="fab-summary">
+                            <span id="midterm-total">0 students</span>
+                            <span id="midterm-submitted">0 submitted</span>
+                            <span id="midterm-missing">0 missing</span>
+                        </div>
+                    </div>
+                    <div class="term-card term-final">
+                        <div class="term-header">
+                            <i class="fas fa-flag-checkered"></i>
+                            <h3>Finals</h3>
+                        </div>
+                        <div class="controls compact">
+                            <input id="final-name" type="text" placeholder="Assignment name" aria-label="Assignment name">
+                            <input id="final-max" type="number" min="1" placeholder="Max" aria-label="Max score">
+                            <input id="final-date" type="date" aria-label="Due date">
+                            <button class="btn-primary" onclick="initAdminTerm('final')" aria-label="Refresh finals"><i class="fas fa-sync"></i></button>
+                        </div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Name</th>
+                                        <th>Status</th>
+                                        <th>Score</th>
+                                        <th>%</th>
+                                        <th>Save</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="final-body"></tbody>
+                            </table>
+                        </div>
+                        <div class="fab-summary">
+                            <span id="final-total">0 students</span>
+                            <span id="final-submitted">0 submitted</span>
+                            <span id="final-missing">0 missing</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Admin Announcements -->
+            <section id="admin-announcements" class="section" style="display:none;">
+                <div class="section-header">
+                    <h2>Announcements</h2>
+                </div>
+                <div id="admin-announcements-list" class="announcements-list"></div>
+            </section>
             <!-- Project Info Section Removed -->
         </main>
     </div>
@@ -368,6 +533,40 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <div id="registerModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="registerClose">&times;</span>
+            <h2>Create Account</h2>
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="reg-student-id">Student ID</label>
+                    <input type="text" id="reg-student-id" required>
+                </div>
+                <div class="form-group">
+                    <label for="reg-email">Email</label>
+                    <input type="email" id="reg-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="reg-password">Password</label>
+                    <input type="password" id="reg-password" required aria-describedby="strength-text">
+                    <div class="strength-meter">
+                        <div id="strength-bar"></div>
+                    </div>
+                    <div id="strength-text" class="hint"></div>
+                </div>
+                <div class="form-group">
+                    <label for="reg-confirm">Confirm Password</label>
+                    <input type="password" id="reg-confirm" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="registerCancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Register</button>
+                </div>
+            </form>
+            <div class="hint">For demo only. Backend integration required.</div>
+        </div>
     </div>
 
     <!-- Enhanced Modal -->

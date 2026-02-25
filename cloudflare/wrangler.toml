@@ -1,0 +1,35 @@
+name = "sims-worker"
+main = "src/worker.js"
+compatibility_date = "2026-02-25"
+workers_dev = true
+routes = []
+
+[durable_objects]
+bindings = [
+  { name = "SYNC_HUB", class_name = "SyncHub" }
+]
+
+[[kv_namespaces]]
+binding = "SIMS_CACHE"
+id = "00000000000000000000000000000000"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sims-d1"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "sims-backups"
+
+[analytics_engine_datasets]
+bindings = [
+  { binding = "ANALYTICS", dataset = "sims_analytics" }
+]
+
+[vars]
+JWT_ISS = "sims"
+JWT_AUD = "sims-clients"
+
+[triggers]
+crons = ["0 * * * *"]
