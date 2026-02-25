@@ -7,16 +7,38 @@ const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = 3000;
-const SECRET_KEY = 'super-secret-key-sims-2026'; // In production, use env var
+const SECRET_KEY = process.env.JWT_SECRET || 'super-secret-key-sims-2026'; // Use env var
 const DATA_FILE = path.join(__dirname, 'data', 'students.json');
 const USERS_FILE = path.join(__dirname, 'data', 'users.json');
 const AUDIT_FILE = path.join(__dirname, 'data', 'audit_logs.json');
 const ASSESSMENTS_FILE = path.join(__dirname, 'data', 'assessments.json');
 const ANNOUNCEMENTS_FILE = path.join(__dirname, 'data', 'announcements.json');
 const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
+
+// Security Middleware
+app.use(helmet());
+
+// Rate Limiting
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later.' }
+});
+app.use(limiter);
+
+// Login Rate Limiter (Stricter)
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // limit each IP to 5 login attempts per windowMs
+    message: { error: 'Too many login attempts, please try again later.' }
+});
 
 // Multer Config
 const storage = multer.diskStorage({
@@ -50,24 +72,8 @@ app.use((req, res, next) => {
     next();
 });
 
-// Auth Middleware
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.sendStatus(401);
-    jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) return res.sendStatus(403);
-        req.user = user;
-        next();
-    });
-};
+// Auth Middleware moved below helpers
 
-const allowRole = (role) => (req, res, next) => {
-    if (!req.user || req.user.role !== role) {
-        return res.status(403).json({ error: 'Access denied' });
-    }
-    next();
-};
 
 const parseCookies = (req) => {
     const header = req.headers.cookie || '';
@@ -170,6 +176,44 @@ const writeAudit = (data) => {
     } catch (err) {
         console.error("Error writing audit:", err);
     }
+};
+
+const logAction = (action, user, details, success = true) => {
+    const logs = readAudit();
+    logs.push({
+        timestamp: new Date().toISOString(),
+        action,
+        user: user || 'Unknown',
+        details,
+        success,
+        ip: '::1' // Ideally capture from req
+    });
+    writeAudit(logs);
+};
+
+// Auth Middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.sendStatus(401);
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
+
+const allowRole = (role) => (req, res, next) => {
+    if (!req.user || req.user.role !== role) {
+        logAction('ACCESS_DENIED', req.user ? req.user.username || req.user.email : 'Unknown', `Attempted access to ${req.path} requiring ${role}`, false);
+        return res.status(403).json({ error: 'Access denied: Insufficient privileges' });
+    }
+    // Log successful admin access for critical routes or just generally?
+    // Let's log if admin accesses sensitive routes
+    if (role === 'admin' && (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE')) {
+         logAction('ADMIN_ACTION', req.user.username, `${req.method} ${req.path}`, true);
+    }
+    next();
 };
 
 const readAssessments = () => {
@@ -402,8 +446,8 @@ app.put('/api/admin/assessments/:studentId', authenticateToken, allowRole('admin
 
 // --- User Management Routes ---
 
-// Login Endpoint
-app.post('/api/login', (req, res) => {
+// Login Endpoint - ADMIN ONLY
+app.post('/api/login', loginLimiter, (req, res) => {
     const { email, password } = req.body;
     
     if (!email || !password) {
@@ -411,7 +455,7 @@ app.post('/api/login', (req, res) => {
     }
 
     const users = readUsers();
-    const students = readData();
+    // Students check removed to restrict system access to admins only
 
     // 1. Check Admin Users (by email)
     const adminUser = users.find(u => u.email === email && u.status === 'active');
@@ -419,6 +463,7 @@ app.post('/api/login', (req, res) => {
     if (adminUser) {
         const passwordMatch = bcrypt.compareSync(password, adminUser.password);
         if (!passwordMatch) {
+            logAction('LOGIN_FAILED', email, 'Wrong password', false);
             return res.status(401).json({ error: 'wrong password' });
         }
         
@@ -429,43 +474,20 @@ app.post('/api/login', (req, res) => {
             { expiresIn: '24h' }
         );
 
+        logAction('LOGIN_SUCCESS', adminUser.username, 'Admin logged in', true);
         const { password: _, ...userWithoutPassword } = adminUser;
         return res.json({ token, user: userWithoutPassword, role: 'admin' });
     }
 
-    // 2. Check Students (by studentId or email)
-    const studentUser = students.find(s => s.studentId === email || s.email === email);
-
-    if (studentUser) {
-        // Check if student has a password (migrated)
-        if (!studentUser.password) {
-             return res.status(401).json({ error: 'Student account not initialized. Contact admin.' });
-        }
-
-        const passwordMatch = bcrypt.compareSync(password, studentUser.password);
-        if (!passwordMatch) {
-            return res.status(401).json({ error: 'wrong password' });
-        }
-
-        // Generate Token for Student
-        const token = jwt.sign(
-            { id: studentUser.studentId, role: 'student', email: studentUser.email, name: studentUser.name },
-            SECRET_KEY,
-            { expiresIn: '24h' }
-        );
-
-        const { password: _, grades, ...studentWithoutSensitive } = studentUser;
-        return res.json({ token, user: studentWithoutSensitive, role: 'student' });
-    }
-
-    // 3. Not found in either
+    // 2. Not found or not admin
     // Timing attack mitigation
     bcrypt.compareSync(password, '$2b$10$AsEbUuKeBFX5NGE/ezhLu.Bs.Q2U/hdIoMuqTxMwfdwW9T752w/Nm');
-    return res.status(401).json({ error: 'wrong email' });
+    logAction('LOGIN_FAILED', email, 'User not found or access restricted', false);
+    return res.status(401).json({ error: 'Invalid credentials or access denied' });
 });
 
 // Admin Login Endpoint
-app.post('/api/login/admin', (req, res) => {
+app.post('/api/login/admin', loginLimiter, (req, res) => {
     const { email, password, departmentCode } = req.body;
     if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
@@ -474,15 +496,18 @@ app.post('/api/login/admin', (req, res) => {
     const adminUser = users.find(u => u.email === email && u.status === 'active');
     if (!adminUser) {
         bcrypt.compareSync(password, '$2b$10$AsEbUuKeBFX5NGE/ezhLu.Bs.Q2U/hdIoMuqTxMwfdwW9T752w/Nm');
+        logAction('LOGIN_FAILED', email, 'Admin user not found', false);
         return res.status(401).json({ error: 'wrong email' });
     }
     const passwordMatch = bcrypt.compareSync(password, adminUser.password);
     if (!passwordMatch) {
+        logAction('LOGIN_FAILED', email, 'Wrong password', false);
         return res.status(401).json({ error: 'wrong password' });
     }
     const requiredDeptCode = process.env.ADMIN_DEPT_CODE;
     if (requiredDeptCode) {
         if (!departmentCode || departmentCode !== requiredDeptCode) {
+            logAction('LOGIN_FAILED', email, 'Invalid department code', false);
             return res.status(401).json({ error: 'invalid department code' });
         }
     }
@@ -491,69 +516,21 @@ app.post('/api/login/admin', (req, res) => {
         SECRET_KEY,
         { expiresIn: '24h' }
     );
+    logAction('LOGIN_SUCCESS', adminUser.username, 'Admin logged in via dedicated endpoint', true);
     const { password: _, ...userWithoutPassword } = adminUser;
     return res.json({ token, user: userWithoutPassword, role: 'admin' });
 });
 
-// Student Login Endpoint
-app.post('/api/login/student', (req, res) => {
-    if (!requireCsrf(req)) {
-        return res.status(403).json({ error: 'csrf invalid' });
-    }
-    const { email, password, captchaToken, captchaAnswer } = req.body || {};
-    const key = ipKey(req);
-    const now = Date.now();
-    const record = loginAttempts.get(key) || { count: 0, ts: now, blockedUntil: 0 };
-    if (record.blockedUntil && now < record.blockedUntil) {
-        return res.status(429).json({ error: 'too many attempts', captchaRequired: true });
-    }
-    const needsCaptcha = record.count >= 3;
-    if (needsCaptcha) {
-        if (!captchaToken || !captchaAnswer) {
-            return res.status(400).json({ error: 'captcha required', captchaRequired: true });
-        }
-        const ch = captchaChallenges.get(captchaToken);
-        if (!ch || now > ch.expires || ch.answer !== String(captchaAnswer).trim()) {
-            return res.status(400).json({ error: 'captcha invalid', captchaRequired: true });
-        }
-        captchaChallenges.delete(captchaToken);
-    }
-    if (!email || !password) {
-        return res.status(400).json({ error: 'ID/Email and password are required' });
-    }
-    if (String(email).length > 120 || String(password).length > 120) {
-        return res.status(400).json({ error: 'invalid input' });
-    }
-    if (!email || !password) {
-        return res.status(400).json({ error: 'ID/Email and password are required' });
-    }
-    const students = readData();
-    const studentUser = students.find(s => s.studentId === email || s.email === email);
-    if (!studentUser) {
-        bcrypt.compareSync(password, '$2b$10$AsEbUuKeBFX5NGE/ezhLu.Bs.Q2U/hdIoMuqTxMwfdwW9T752w/Nm');
-        record.count += 1;
-        if (record.count >= 6) record.blockedUntil = now + 15 * 60 * 1000;
-        loginAttempts.set(key, record);
-        return res.status(401).json({ error: 'wrong email', captchaRequired: record.count >= 3 });
-    }
-    if (!studentUser.password) {
-        return res.status(401).json({ error: 'account not initialized', captchaRequired: record.count >= 3 });
-    }
-    const passwordMatch = bcrypt.compareSync(password, studentUser.password);
-    if (!passwordMatch) {
-        record.count += 1;
-        if (record.count >= 6) record.blockedUntil = now + 15 * 60 * 1000;
-        loginAttempts.set(key, record);
-        return res.status(401).json({ error: 'wrong password', captchaRequired: record.count >= 3 });
-    }
-    loginAttempts.delete(key);
-    const token = jwt.sign(
-        { id: studentUser.studentId, role: 'student', email: studentUser.email, name: studentUser.name },
-        SECRET_KEY,
-        { expiresIn: '24h' }
-    );
-    const { password: _, grades, ...studentWithoutSensitive } = studentUser;
-    return res.json({ token, user: studentWithoutSensitive, role: 'student' });
+// Student Login Endpoint - RESTRICTED
+app.post('/api/login/student', loginLimiter, (req, res) => {
+    // Log the attempted access
+    const email = req.body.email || 'unknown';
+    logAction('ACCESS_DENIED', email, 'Student login attempted but system is restricted', false);
+    
+    return res.status(403).json({ 
+        error: 'System access is currently restricted to administrators only.',
+        code: 'ACCESS_RESTRICTED'
+    });
 });
 
 
