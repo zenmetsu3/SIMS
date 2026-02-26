@@ -1,10 +1,6 @@
-const API_URL = 'http://localhost:3000/api/students';
-const USER_API_URL = 'http://localhost:3000/api/current-user';
-const LOGIN_API_URL = 'http://localhost:3000/api/login';
-const LOGIN_ADMIN_URL = 'http://localhost:3000/api/login/admin';
-const LOGIN_STUDENT_URL = 'http://localhost:3000/api/login/student';
-const CSRF_URL = 'http://localhost:3000/api/csrf-token';
-const CAPTCHA_URL = 'http://localhost:3000/api/captcha';
+// Local Demo Constants
+const MOCK_ADMIN_EMAIL = "admin@sims.com";
+const MOCK_ADMIN_PASS = "admin123";
 
 // --- Role Toggle State ---
 let loginDraft = {
@@ -102,7 +98,39 @@ document.addEventListener('DOMContentLoaded', () => {
             setActiveRole('student');
         });
     }
+
+    // Bind Login Forms
+    const adminForm = document.getElementById('admin-form');
+    if (adminForm) {
+        adminForm.addEventListener('submit', handleAdminLogin);
+    }
+    const studentForm = document.getElementById('student-form');
+    if (studentForm) {
+        studentForm.addEventListener('submit', handleStudentLogin);
+    }
 });
+
+// --- Local Data Sync ---
+let studentSyncUnsubscribe = null;
+
+function startStudentSync() {
+    if (studentSyncUnsubscribe) {
+        studentSyncUnsubscribe();
+    }
+    
+    // Subscribe to changes in LocalStorage
+    studentSyncUnsubscribe = DatabaseService.subscribeToStudents((data) => {
+        // Convert object to array for display
+        const studentsList = Object.values(data);
+        // Use the global students array for filtering
+        students = studentsList;
+        renderTable(students);
+        updateStats();
+    });
+}
+
+// Remove Firebase ready listener
+// window.addEventListener('firebase-ready', () => {});
 
 // --- Login Logic: Admin ---
 async function handleAdminLogin(e) {
@@ -128,44 +156,41 @@ async function handleAdminLogin(e) {
     btn.disabled = true;
     btn.style.opacity = '0.7';
     try {
-        const response = await fetch(LOGIN_ADMIN_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password, departmentCode })
-        });
-        const data = await response.json();
-        if (response.ok) {
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('role', data.role);
+        await new Promise(r => setTimeout(r, 500));
+
+        const user = await DatabaseService.getUserByEmail(email);
+        const deptOk = user && typeof user.departmentCode === 'string'
+            ? (departmentCode || '').trim().toUpperCase() === user.departmentCode.trim().toUpperCase()
+            : true;
+
+        if (user && user.role === 'admin' && user.password === password && deptOk) {
+            localStorage.setItem('token', 'mock-admin-token-' + email);
+            localStorage.setItem('role', 'admin');
             const loginScreen = document.getElementById('login-screen');
-            loginScreen.style.opacity = '0';
-            loginScreen.style.transition = 'opacity 0.5s ease';
+            loginScreen.classList.add('hidden');
             setTimeout(() => {
                 loginScreen.style.display = 'none';
                 document.getElementById('app-dashboard').style.display = 'flex';
                 fetchUser();
-                fetchStudents();
+                startStudentSync(); 
             }, 500);
         } else {
-            const errorMessage = data.error || 'Login failed';
-            if (errorMessage === 'wrong email') {
-                emailError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Wrong email';
+            if (!user || user.role !== 'admin') {
+                emailError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Admin account not found';
                 emailInput.classList.add('error');
                 emailInput.focus();
-            } else if (errorMessage === 'wrong password') {
+            } else if (user.password !== password) {
                 passwordError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Wrong password';
                 passwordInput.classList.add('error');
                 passwordInput.focus();
-            } else if (errorMessage === 'invalid department code') {
+            } else if (!deptOk) {
                 deptError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Invalid department code';
                 deptInput.classList.add('error');
                 deptInput.focus();
-            } else {
-                alert(errorMessage);
             }
         }
     } catch (err) {
-        alert(err.message || 'An error occurred during admin login.');
+        alert('An error occurred during admin login.');
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;
@@ -184,125 +209,93 @@ async function handleStudentLogin(e) {
     const passwordError = document.getElementById('student-password-error');
     const remember = document.getElementById('student-remember');
     const submitBtn = document.getElementById('student-submit-btn');
-    const captchaWrap = document.getElementById('student-captcha');
-    const captchaText = document.getElementById('captcha-text');
-    const captchaAnswerEl = document.getElementById('captcha-answer');
-    const email = idInput.value.trim();
+    const identifier = idInput.value.trim();
     const password = passwordInput.value;
     const btn = submitBtn;
     const originalText = btn.querySelector('.btn-text').innerText;
+    
+    // Reset UI
     idError.innerText = '';
     passwordError.innerText = '';
     idInput.classList.remove('error');
     passwordInput.classList.remove('error');
     idInput.setAttribute('aria-invalid', 'false');
     passwordInput.setAttribute('aria-invalid', 'false');
-    btn.querySelector('.btn-text').innerText = 'Signing In...';
-    btn.classList.add('loading');
-    btn.disabled = true;
-    btn.style.opacity = '0.7';
-    const emailValid = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$/.test(email) || /^[A-Za-z0-9-]+$/.test(email);
-    if (!email || !emailValid) {
-        idError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Enter a valid email or ID';
+    
+    // Basic Validation
+    if (!identifier) {
+        idError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Enter your email or ID';
         idInput.classList.add('error');
-        idInput.setAttribute('aria-invalid', 'true');
-        btn.querySelector('.btn-text').innerText = originalText;
-        btn.classList.remove('loading');
-        btn.disabled = false;
-        btn.style.opacity = '1';
         return;
     }
     if (!password) {
         passwordError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Enter your password';
         passwordInput.classList.add('error');
-        passwordInput.setAttribute('aria-invalid', 'true');
-        btn.querySelector('.btn-text').innerText = originalText;
-        btn.classList.remove('loading');
-        btn.disabled = false;
-        btn.style.opacity = '1';
         return;
     }
+
+    btn.querySelector('.btn-text').innerText = 'Signing In...';
+    btn.classList.add('loading');
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+
     try {
-        const csrf = await ensureCsrf();
-        const body = { email, password };
-        const visibleCaptcha = captchaWrap.style.display !== 'none';
-        if (visibleCaptcha) {
-            const t = sessionStorage.getItem('captchaToken');
-            const ans = captchaAnswerEl.value.trim();
-            if (t && ans) {
-                body.captchaToken = t;
-                body.captchaAnswer = ans;
-            }
+        await new Promise(r => setTimeout(r, 500)); // Fake delay
+        
+        // Check user by email first
+        let user = await DatabaseService.getUserByEmail(identifier);
+        // If not found by email, try by studentId
+        if (!user) {
+            user = await DatabaseService.getUserByStudentId(identifier);
         }
-        const response = await fetch(LOGIN_STUDENT_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(csrf ? { 'x-csrf-token': csrf } : {}) },
-            credentials: 'include',
-            body: JSON.stringify(body)
-        });
-        const data = await response.json();
-        if (response.ok) {
+
+        if (user && user.role === 'student') {
+            // Validate password
+            if (user.password !== password) {
+                throw new Error('Invalid email/ID or password');
+            }
+            const studentId = user.studentId;
+            if (!studentId) throw new Error('Student profile not linked');
+
+            const token = 'mock-student-token-' + studentId;
             if (remember && remember.checked) {
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('role', data.role);
+               localStorage.setItem('token', token);
+               localStorage.setItem('role', 'student');
+               localStorage.setItem('currentStudentId', studentId);
             } else {
-                sessionStorage.setItem('token', data.token);
-                sessionStorage.setItem('role', data.role);
+               sessionStorage.setItem('token', token);
+               sessionStorage.setItem('role', 'student');
+               sessionStorage.setItem('currentStudentId', studentId);
             }
-            const loginScreen = document.getElementById('login-screen');
-            loginScreen.style.opacity = '0';
-            loginScreen.style.transition = 'opacity 0.5s ease';
-            setTimeout(() => {
-                loginScreen.style.display = 'none';
-                document.getElementById('student-dashboard').style.display = 'flex';
-                loadStudentDashboard();
-            }, 500);
+
+           const loginScreen = document.getElementById('login-screen');
+           loginScreen.classList.add('hidden');
+           setTimeout(() => {
+               loginScreen.style.display = 'none';
+               document.getElementById('app-dashboard').style.display = 'none';
+               document.getElementById('student-dashboard').style.display = 'flex';
+               loadStudentDashboard();
+           }, 500);
         } else {
-            const errorMessage = data.error || 'Login failed';
-            if (errorMessage === 'wrong email') {
-                idError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Wrong ID or email';
-                idInput.classList.add('error');
-                idInput.focus();
-            } else if (errorMessage === 'wrong password') {
-                passwordError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Wrong password';
-                passwordInput.classList.add('error');
-                passwordInput.focus();
-            } else if (errorMessage === 'account not initialized') {
-                idError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Account not initialized. Contact admin.';
-                idInput.classList.add('error');
-            } else if (errorMessage === 'captcha required' || data.captchaRequired) {
-                captchaWrap.style.display = '';
-                try {
-                    const c = await fetch('http://localhost:3000/api/captcha', { credentials: 'include' });
-                    if (c.ok) {
-                        const cj = await c.json();
-                        sessionStorage.setItem('captchaToken', cj.token);
-                        captchaText.innerText = cj.text;
-                        captchaAnswerEl.value = '';
-                        document.getElementById('captcha-error').innerText = '';
-                    }
-                } catch {}
-            } else if (errorMessage === 'captcha invalid') {
-                document.getElementById('captcha-error').innerHTML = '<i class="fas fa-exclamation-circle"></i> Incorrect answer';
-                captchaAnswerEl.classList.add('error');
-                captchaAnswerEl.focus();
-            } else if (response.status === 429) {
-                idError.innerHTML = '<i class="fas fa-exclamation-circle"></i> Too many attempts. Please try again later.';
-                captchaWrap.style.display = '';
-            } else {
-                alert(errorMessage);
-            }
+            throw new Error('Student account not found. Please register first.');
         }
+
     } catch (err) {
-        alert(err.message || 'An error occurred during student login.');
+        idError.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${err.message}`;
+        idInput.classList.add('error');
     } finally {
         btn.querySelector('.btn-text').innerText = originalText;
         btn.classList.remove('loading');
         btn.disabled = false;
         btn.style.opacity = '1';
-        loginDraft.student = { id: email, password };
+        loginDraft.student = { id: identifier, password };
         saveDraft();
     }
+}
+
+// Google Login Handler (Disabled)
+async function handleGoogleLogin() {
+    alert("Google Sign-In is disabled in this local demo version.");
 }
 
 // Toggle Password Visibility
@@ -335,29 +328,124 @@ document.addEventListener('DOMContentLoaded', () => {
     if (regClose) regClose.addEventListener('click', () => regModal.style.display = 'none');
     if (regCancel) regCancel.addEventListener('click', () => regModal.style.display = 'none');
     if (regForm) {
+        // Password Strength Meter
         const pw = document.getElementById('reg-password');
         const bar = document.getElementById('strength-bar');
         const text = document.getElementById('strength-text');
-        const calcStrength = (v) => {
-            let score = 0;
-            if (v.length >= 8) score++;
-            if (/[A-Z]/.test(v)) score++;
-            if (/[a-z]/.test(v)) score++;
-            if (/[0-9]/.test(v)) score++;
-            if (/[^A-Za-z0-9]/.test(v)) score++;
-            return score;
-        };
-        pw.addEventListener('input', () => {
-            const s = calcStrength(pw.value);
-            const pct = (s / 5) * 100;
-            bar.style.width = pct + '%';
-            if (s <= 2) { bar.style.background = '#ff4d4d'; text.textContent = 'Weak'; }
-            else if (s === 3) { bar.style.background = '#ffcc00'; text.textContent = 'Medium'; }
-            else { bar.style.background = '#2ecc71'; text.textContent = 'Strong'; }
-        });
-        regForm.addEventListener('submit', (e) => {
+        
+        if (pw && bar && text) {
+             const calcStrength = (v) => {
+                let score = 0;
+                if (v.length >= 8) score++;
+                if (/[A-Z]/.test(v)) score++;
+                if (/[a-z]/.test(v)) score++;
+                if (/[0-9]/.test(v)) score++;
+                if (/[^A-Za-z0-9]/.test(v)) score++;
+                return score;
+            };
+            pw.addEventListener('input', () => {
+                const s = calcStrength(pw.value);
+                const pct = (s / 5) * 100;
+                bar.style.width = pct + '%';
+                if (s <= 2) { bar.style.background = '#ff4d4d'; text.textContent = 'Weak'; }
+                else if (s === 3) { bar.style.background = '#ffcc00'; text.textContent = 'Medium'; }
+                else { bar.style.background = '#2ecc71'; text.textContent = 'Strong'; }
+            });
+        }
+        
+        regForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            alert('Registration requires backend integration.');
+            
+            const email = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('reg-password').value;
+            const confirmPass = document.getElementById('reg-confirm').value;
+            const studentId = document.getElementById('reg-student-id').value.trim();
+            const firstName = (document.getElementById('reg-first-name')?.value || '').trim();
+            const middleName = (document.getElementById('reg-middle-name')?.value || '').trim();
+            const lastName = (document.getElementById('reg-last-name')?.value || '').trim();
+            const degreeProgram = (document.getElementById('reg-degree')?.value || '').trim();
+            const yearLevel = (document.getElementById('reg-year-level')?.value || '').trim();
+            const phone = (document.getElementById('reg-phone')?.value || '').trim();
+            const dob = (document.getElementById('reg-dob')?.value || '').trim();
+            const admissionDate = (document.getElementById('reg-admission-date')?.value || '').trim();
+            const age = (document.getElementById('reg-age')?.value || '').trim();
+            const currentAddress = (document.getElementById('reg-current-address')?.value || '').trim();
+            const permanentAddress = (document.getElementById('reg-permanent-address')?.value || '').trim();
+            const fatherName = (document.getElementById('reg-father-name')?.value || '').trim();
+            const motherName = (document.getElementById('reg-mother-name')?.value || '').trim();
+            
+            const errors = [];
+            const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!studentId) errors.push('Student ID is required');
+            if (!firstName) errors.push('First name is required');
+            if (!lastName) errors.push('Last name is required');
+            if (!degreeProgram) errors.push('Course is required');
+            if (!yearLevel) errors.push('Year level is required');
+            if (!email || !emailRe.test(email)) errors.push('Valid email is required');
+            if (!password || password.length < 8) errors.push('Password must be at least 8 characters');
+            if (password !== confirmPass) errors.push('Passwords do not match');
+            if (phone && !/^[0-9()+\-\s]{7,20}$/.test(phone)) errors.push('Phone number format is invalid');
+            
+            if (errors.length) {
+                alert('Please fix the following:\n- ' + errors.join('\n- '));
+                return;
+            }
+
+            try {
+                // Mock Registration
+                const existingStudents = await DatabaseService._getStudents();
+                if (existingStudents[studentId]) {
+                    throw new Error("Student ID already exists.");
+                }
+                
+                // Check email uniqueness
+                const emailExists = Object.values(existingStudents).some(s => s.email === email);
+                if (emailExists) {
+                    throw new Error("Email already exists.");
+                }
+
+                const newStudent = {
+                    email,
+                    studentId,
+                    firstName: firstName || "New",
+                    middleName: middleName || "",
+                    lastName: lastName || "Student",
+                    course: degreeProgram || "",
+                    yearLevel: yearLevel || "",
+                    phone: phone || "",
+                    birthDate: dob || "",
+                    admissionDate: admissionDate || "",
+                    age: age || "",
+                    currentAddress: currentAddress || "",
+                    permanentAddress: permanentAddress || "",
+                    fatherName: fatherName || "",
+                    motherName: motherName || "",
+                    status: "active",
+                    password: password, // Storing plain text for demo
+                    createdAt: new Date().toISOString()
+                };
+                
+                // Use DatabaseService
+                await DatabaseService.setStudent(studentId, newStudent);
+                // Also create linked user account for login
+                await DatabaseService.setUser({
+                    email,
+                    password,
+                    role: 'student',
+                    studentId,
+                    createdAt: new Date().toISOString()
+                });
+
+                alert('Registration successful! Please login.');
+                // Find and close modal properly
+                const modal = document.getElementById('registerModal') || document.querySelector('.modal');
+                if (modal) modal.style.display = 'none';
+                regForm.reset();
+                
+            } catch (error) {
+                console.error("Registration Error:", error);
+                alert('Registration failed: ' + error.message);
+            }
         });
     }
 });
@@ -389,6 +477,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const role = localStorage.getItem('role') || sessionStorage.getItem('role');
     if (token) {
         document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('login-screen').classList.add('hidden');
         if (role === 'student') {
             document.getElementById('student-dashboard').style.display = 'flex';
             loadStudentDashboard();
@@ -404,14 +493,19 @@ function handleLogout() {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
     
+    if (studentSyncUnsubscribe) {
+        studentSyncUnsubscribe();
+        studentSyncUnsubscribe = null;
+    }
+    
     document.getElementById('app-dashboard').style.display = 'none';
     document.getElementById('student-dashboard').style.display = 'none';
     
     const loginScreen = document.getElementById('login-screen');
     loginScreen.style.display = 'flex';
-    setTimeout(() => {
-        loginScreen.style.opacity = '1';
-    }, 10);
+    // Force reflow
+    void loginScreen.offsetWidth;
+    loginScreen.classList.remove('hidden');
     
     // Reset form
     const adminEmail = document.getElementById('admin-email');
@@ -444,46 +538,34 @@ function getAuthHeaders() {
 }
 
 async function ensureCsrf() {
-    try {
-        const existing = sessionStorage.getItem('csrfToken');
-        if (existing) return existing;
-        const res = await fetch(CSRF_URL, { credentials: 'include' });
-        if (res.ok) {
-            const data = await res.json();
-            sessionStorage.setItem('csrfToken', data.token);
-            return data.token;
-        }
-    } catch {}
-    return null;
+    return "mock-csrf-token";
 }
 
 // (Removed obsolete Quick Panel functions)
 // Fetch User
 async function fetchUser() {
     try {
-        const res = await fetch(USER_API_URL, {
-            headers: getAuthHeaders()
-        });
-        
-        if (!res.ok) {
-            if (res.status === 401 || res.status === 403) return false;
-            throw new Error('Failed to fetch user');
-        }
-
-        const user = await res.json();
+        const role = localStorage.getItem('role');
         const profileEl = document.getElementById('user-profile');
         const usernameEl = document.getElementById('username-display');
         
-        if (user && user.username) {
-            // Capitalize first letter
-            const name = user.username.charAt(0).toUpperCase() + user.username.slice(1);
-            usernameEl.innerText = name;
+        if (role === 'admin') {
+            usernameEl.innerText = 'Admin';
             profileEl.style.display = 'flex';
             return true;
-        } else {
-            profileEl.style.display = 'none';
-            return false;
+        } else if (role === 'student') {
+             // Already handled by loadStudentDashboard mostly
+             const id = localStorage.getItem('currentStudentId');
+             if (id) {
+                 const student = await DatabaseService.getStudent(id);
+                 if (student) {
+                    usernameEl.innerText = student.firstName;
+                    profileEl.style.display = 'flex';
+                    return true;
+                 }
+             }
         }
+        return false;
     } catch (err) {
         console.error('Error fetching user:', err);
         return false;
@@ -520,128 +602,157 @@ function renderAnnouncementsTo(containerId, data) {
 }
 
 async function initAdminAnnouncements() {
-    try {
-        const res = await fetch('http://localhost:3000/api/announcements', { headers: getAuthHeaders() });
-        if (res.ok) {
-            const data = await res.json();
-            renderAnnouncementsTo('admin-announcements-list', data);
-        }
-    } catch {}
+    // Mock - No backend
 }
 
-async function initAdminTerm(term) {
+async function loadAdminGradingSheet() {
     try {
-        const res = await fetch(API_URL, { headers: getAuthHeaders() });
-        if (!res.ok) return;
-        const data = await res.json();
-        const bodyId = `${term}-body`;
-        const totalId = `${term}-total`;
-        const subId = `${term}-submitted`;
-        const missId = `${term}-missing`;
-        const nameId = `${term}-name`;
-        const maxId = `${term}-max`;
-        const dateId = `${term}-date`;
-        const tbody = document.getElementById(bodyId);
-        const totalEl = document.getElementById(totalId);
-        const submittedEl = document.getElementById(subId);
-        const missingEl = document.getElementById(missId);
+        const data = await DatabaseService._getStudents();
+        const students = Object.values(data);
+        const tbody = document.getElementById('admin-grading-body');
         tbody.innerHTML = '';
-        let submitted = 0;
-        let missing = 0;
-        const aname = document.getElementById(nameId).value.trim();
-        const amax = parseFloat(document.getElementById(maxId).value);
-        data.forEach(st => {
+        
+        students.forEach(st => {
             const tr = document.createElement('tr');
-            const statusId = `${term}-status-${st.studentId}`;
-            const scoreId = `${term}-score-${st.studentId}`;
+            
+            // Get grades from the first semester found or mock data
+            let subjects = [];
+            if (st.grades && st.grades.length > 0 && st.grades[0].courses) {
+                subjects = st.grades[0].courses.slice(0, 4); // Take up to 4 subjects
+            }
+            
+            // Fill up with placeholders if less than 4
+            while (subjects.length < 4) {
+                subjects.push({ grade: 0 });
+            }
+
+            const s1 = parseFloat(subjects[0].grade) || 0;
+            const s2 = parseFloat(subjects[1].grade) || 0;
+            const s3 = parseFloat(subjects[2].grade) || 0;
+            const s4 = parseFloat(subjects[3].grade) || 0;
+            
+            // Determine Letter Grade based on average
+            const avg = (s1 + s2 + s3 + s4) / 4;
+            const avgDisplay = avg.toFixed(2);
+            
+            let letter = 'F';
+            if (avg <= 1.5 && avg > 0) letter = 'A';
+            else if (avg <= 2.5 && avg > 0) letter = 'B';
+            else if (avg <= 3.0 && avg > 0) letter = 'C';
+            else if (avg <= 4.0 && avg > 0) letter = 'D';
+            else if (avg === 0) letter = '-';
+            
+            const inputStyle = "width: 60px; padding: 5px; border: 1px solid #ccc; border-radius: 4px; text-align: center;";
+
             tr.innerHTML = `
-                <td>${st.studentId}</td>
-                <td>${st.name || (st.firstName + ' ' + st.lastName)}</td>
-                <td>
-                    <select id="${statusId}" aria-label="Submission status for ${st.studentId}">
-                        <option value="Pending">Pending</option>
-                        <option value="Submitted">Submitted</option>
-                        <option value="Missing">Missing</option>
-                    </select>
+                <td style="padding: 12px; border-bottom: 1px solid #eee;">${st.name || (st.firstName + ' ' + st.lastName)}</td>
+                <td style="padding: 12px; border-bottom: 1px solid #eee;">
+                    <input type="number" step="0.01" min="0" value="${s1 || ''}" style="${inputStyle}" class="grade-input" data-idx="0">
                 </td>
-                <td>
-                    <input id="${scoreId}" type="number" min="0" ${isFinite(amax) ? `max="${amax}"` : ''} step="0.01" inputmode="decimal" aria-label="Score for ${st.studentId}">
+                <td style="padding: 12px; border-bottom: 1px solid #eee;">
+                    <input type="number" step="0.01" min="0" value="${s2 || ''}" style="${inputStyle}" class="grade-input" data-idx="1">
                 </td>
-                <td id="${term}-pct-${st.studentId}">-</td>
-                <td>
-                    <button class="btn-primary" aria-label="Save grade for ${st.studentId}" data-id="${st.studentId}">Save</button>
+                <td style="padding: 12px; border-bottom: 1px solid #eee;">
+                    <input type="number" step="0.01" min="0" value="${s3 || ''}" style="${inputStyle}" class="grade-input" data-idx="2">
+                </td>
+                <td style="padding: 12px; border-bottom: 1px solid #eee;">
+                    <input type="number" step="0.01" min="0" value="${s4 || ''}" style="${inputStyle}" class="grade-input" data-idx="3">
+                </td>
+                <td style="padding: 12px; border-bottom: 1px solid #eee;" class="total-score">${avgDisplay}</td>
+                <td style="padding: 12px; border-bottom: 1px solid #eee; font-weight: bold;" class="letter-grade">${letter}</td>
+                <td style="padding: 12px; border-bottom: 1px solid #eee;">
+                    <button class="btn-primary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="saveStudentGrades('${st.studentId}', this)">Save</button>
                 </td>
             `;
             tbody.appendChild(tr);
-            const select = tr.querySelector(`#${statusId}`);
-            const input = tr.querySelector(`#${scoreId}`);
-            const pctCell = tr.querySelector(`#${term}-pct-${st.studentId}`);
-            const calc = () => {
-                const v = parseFloat(input.value);
-                if (isFinite(amax) && isFinite(v)) {
-                    const pct = Math.max(0, Math.min(100, (v / amax) * 100));
-                    pctCell.textContent = pct.toFixed(1) + '%';
-                } else {
-                    pctCell.textContent = '-';
-                }
+
+            // Add change listener for live calc
+            const inputs = tr.querySelectorAll('.grade-input');
+            const totalEl = tr.querySelector('.total-score');
+            const letterEl = tr.querySelector('.letter-grade');
+
+            const recalc = () => {
+                let sum = 0;
+                let count = 0;
+                inputs.forEach(inp => {
+                    const val = parseFloat(inp.value) || 0;
+                    sum += val;
+                    if (parseFloat(inp.value) > 0) count++; 
+                });
+                
+                // Fixed 4 subjects logic
+                const average = sum / 4;
+                totalEl.innerText = average.toFixed(2);
+                
+                let l = 'F';
+                if (average <= 1.5 && average > 0) l = 'A';
+                else if (average <= 2.5 && average > 0) l = 'B';
+                else if (average <= 3.0 && average > 0) l = 'C';
+                else if (average <= 4.0 && average > 0) l = 'D';
+                else if (average === 0) l = '-';
+                
+                letterEl.innerText = l;
             };
-            input.addEventListener('input', calc);
-            select.addEventListener('change', () => {
-                if (select.value === 'Submitted') submitted++;
-                if (select.value === 'Missing') missing++;
-                submittedEl.textContent = `${submitted} submitted`;
-                missingEl.textContent = `${missing} missing`;
-            });
+
+            inputs.forEach(inp => inp.addEventListener('input', recalc));
         });
-        totalEl.textContent = `${data.length} students`;
-        tbody.querySelectorAll('button.btn-primary').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const studentId = e.currentTarget.getAttribute('data-id');
-                const name = document.getElementById(nameId).value.trim();
-                const maxScore = parseFloat(document.getElementById(maxId).value);
-                const date = document.getElementById(dateId).value || new Date().toISOString().slice(0,10);
-                const scoreInput = document.getElementById(`${term}-score-${studentId}`);
-                const statusSelect = document.getElementById(`${term}-status-${studentId}`);
-                const rawScore = scoreInput.value;
-                if (!name || !isFinite(maxScore)) {
-                    alert('Provide assignment name and max score.');
-                    return;
-                }
-                const payload = {
-                    assignment: {
-                        name,
-                        maxScore,
-                        date,
-                        term,
-                        status: statusSelect.value,
-                        score: rawScore === '' ? null : parseFloat(rawScore)
-                    }
-                };
-                try {
-                    const resp = await fetch(`http://localhost:3000/api/admin/assessments/${studentId}`, {
-                        method: 'PUT',
-                        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    if (!resp.ok) throw new Error('Save failed');
-                    e.currentTarget.textContent = 'Saved';
-                    setTimeout(() => e.currentTarget.textContent = 'Save', 1200);
-                } catch {
-                    alert('Failed to save grade.');
-                }
+    } catch (err) {
+        console.error("Error loading grading sheet:", err);
+    }
+}
+
+async function saveStudentGrades(studentId, btn) {
+    const originalText = btn.innerText;
+    btn.innerText = 'Saving...';
+    btn.disabled = true;
+
+    try {
+        const tr = btn.closest('tr');
+        const inputs = tr.querySelectorAll('.grade-input');
+        const newGrades = Array.from(inputs).map(inp => parseFloat(inp.value) || 0);
+
+        const student = await DatabaseService.getStudent(studentId);
+        if (student) {
+            // Ensure structure exists
+            if (!student.grades) student.grades = [];
+            if (student.grades.length === 0) student.grades.push({ semester: "1st Semester", courses: [] });
+            
+            // Update courses
+            const courses = student.grades[0].courses;
+            // Ensure we have enough course slots
+            while (courses.length < 4) {
+                courses.push({ code: `SUBJ${courses.length+1}`, title: `Subject ${courses.length+1}`, units: 3, grade: 0 });
+            }
+
+            // Update specific grades
+            newGrades.forEach((val, i) => {
+                if (courses[i]) courses[i].grade = val;
             });
-        });
-    } catch {}
+
+            await DatabaseService.updateStudent(studentId, { grades: student.grades });
+            btn.innerText = 'Saved!';
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }, 1500);
+        }
+    } catch (err) {
+        console.error("Save error:", err);
+        alert("Failed to save grades");
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+}
+
+async function initAdminTerm(term) {
+    // Deprecated
 }
 
 // Fetch Data
 async function fetchStudents() {
     try {
-        const res = await fetch(API_URL, {
-            headers: getAuthHeaders()
-        });
-        if (!res.ok) throw new Error('Failed to fetch data');
-        students = await res.json();
+        const data = await DatabaseService._getStudents();
+        students = Object.values(data);
         renderTable(students);
         updateStats();
     } catch (err) {
@@ -702,15 +813,28 @@ function showSection(sectionId) {
     document.querySelectorAll('.sidebar li').forEach(l => l.classList.remove('active'));
     
     // Find nav item (manual mapping or simple check)
-    if (sectionId === 'dashboard') {
-        document.querySelector('.sidebar li:nth-child(1)').classList.add('active');
-        document.getElementById('page-title').innerText = 'Overview';
-    } else if (sectionId === 'students') {
-        document.querySelector('.sidebar li:nth-child(2)').classList.add('active');
-        document.getElementById('page-title').innerText = 'Student Records';
-    } else if (sectionId === 'profile-view') {
-        document.querySelector('.sidebar li:nth-child(2)').classList.add('active'); // Keep Students active
-        document.getElementById('page-title').innerText = 'Student Profile';
+    const titleMap = {
+        'dashboard': 'Overview',
+        'students': 'Student Records',
+        'profile-view': 'Student Profile',
+        'admin-grading': 'Grading Sheet',
+        'admin-announcements': 'Announcements'
+    };
+    
+    const activeIndexMap = {
+        'dashboard': 1,
+        'students': 2,
+        'profile-view': 2,
+        'admin-grading': 3,
+        'admin-announcements': 4
+    };
+    
+    if (titleMap[sectionId]) {
+        document.getElementById('page-title').innerText = titleMap[sectionId];
+    }
+    
+    if (activeIndexMap[sectionId]) {
+        document.querySelector(`.sidebar li:nth-child(${activeIndexMap[sectionId]})`).classList.add('active');
     }
 }
 
@@ -751,6 +875,10 @@ function viewProfile(id) {
         const key = map[field];
         document.getElementById(`view-${field}`).innerText = student[key] || '-';
     });
+
+    // Render Grades
+    const grades = student.grades || [];
+    renderStudentGrades(grades, 'admin-view-grades-container', id);
 }
 
 function editCurrentProfile() {
@@ -807,47 +935,35 @@ form.addEventListener('submit', async (e) => {
     const isEdit = document.getElementById('editMode').value === 'true';
     const formData = new FormData(form);
     
-    // Handle specific logic if needed (e.g. converting empty strings to null? Backend handles some)
+    // Mock Form Submission
+    const data = Object.fromEntries(formData.entries());
+    const studentId = data.studentId;
 
     try {
-        let res;
         if (isEdit) {
-            const id = document.getElementById('studentId').value;
-            res = await fetch(`${API_URL}/${id}`, {
-                method: 'PUT',
-                headers: getAuthHeaders(),
-                body: formData // Fetch automatically sets Content-Type to multipart/form-data
-            });
+            await DatabaseService.updateStudent(studentId, data);
         } else {
-            res = await fetch(API_URL, {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: formData
+            const existing = await DatabaseService.getStudent(studentId);
+            if (existing) throw new Error("Student ID already exists");
+            await DatabaseService.setStudent(studentId, {
+                ...data,
+                status: 'active',
+                createdAt: new Date().toISOString()
             });
-        }
-
-        if (!res.ok) {
-            const err = await res.json();
-            alert(err.error || 'An error occurred');
-            return;
         }
 
         closeModal();
-        fetchStudents();
         
         // If we are currently viewing this profile, refresh it
-        if (isEdit && currentProfileId === document.getElementById('studentId').value) {
-            // Re-fetch to get updated data (like photo URL)
-            const updatedRes = await fetch(API_URL, {
-                headers: getAuthHeaders()
-            });
-            students = await updatedRes.json();
-            viewProfile(currentProfileId);
+        if (isEdit && currentProfileId === studentId) {
+             const allData = await DatabaseService._getStudents();
+             students = Object.values(allData);
+             viewProfile(currentProfileId);
         }
 
     } catch (err) {
         console.error('Error saving student:', err);
-        alert('An error occurred');
+        alert(err.message || 'An error occurred');
     }
 });
 
@@ -855,11 +971,9 @@ form.addEventListener('submit', async (e) => {
 async function deleteStudent(id) {
     if (confirm('Are you sure you want to delete this student?')) {
         try {
-            await fetch(`${API_URL}/${id}`, {
-                method: 'DELETE',
-                headers: getAuthHeaders()
-            });
-            fetchStudents();
+            await DatabaseService.deleteStudent(id);
+            // Re-fetch handled by subscription
+            
             if (currentProfileId === id) {
                 showSection('students');
                 currentProfileId = null;
@@ -945,13 +1059,24 @@ document.addEventListener('click', (e) => {
 
 async function loadStudentDashboard() {
     try {
-        // Fetch Student Profile
-        const profileRes = await fetch(USER_API_URL, {
-            headers: getAuthHeaders()
-        });
-        
-        if (!profileRes.ok) throw new Error('Failed to fetch profile');
-        const student = await profileRes.json();
+        const id = localStorage.getItem('currentStudentId') || sessionStorage.getItem('currentStudentId');
+        if (!id) {
+             // Try to find by email if ID not set (fallback)
+             const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+             if (token && token.startsWith('mock-student-token-')) {
+                 const extractedId = token.replace('mock-student-token-', '');
+                 localStorage.setItem('currentStudentId', extractedId);
+                 // recursive call
+                 return loadStudentDashboard();
+             }
+             return;
+        }
+
+        const student = await DatabaseService.getStudent(id);
+        if (!student) {
+            console.error("Student not found");
+            return;
+        }
         
         // Populate Header
         const name = student.firstName ? `${student.firstName} ${student.lastName}` : student.name;
@@ -966,21 +1091,15 @@ async function loadStudentDashboard() {
         document.getElementById('student-view-year').innerText = student.yearLevel;
         document.getElementById('student-view-email').innerText = student.email;
 
-        // Fetch Grades
-        const gradesRes = await fetch('http://localhost:3000/api/student/grades', {
-            headers: getAuthHeaders()
-        });
-        
-        if (gradesRes.ok) {
-            const grades = await gradesRes.json();
-            renderStudentGrades(grades);
-        }
+        // Mock Data for Grades/Assessments if not present
+        const grades = student.grades || [];
+        renderStudentGrades(grades);
 
-        // Fetch Grading Sheet (Assessments)
-        fetchStudentAssessments();
+        const assessments = student.assessments || [];
+        renderAssessments(assessments);
 
-        // Fetch Announcements
-        fetchAnnouncements();
+        // Fetch Announcements (Mock)
+        // fetchAnnouncements(); 
 
     } catch (err) {
         console.error('Error loading student dashboard:', err);
@@ -992,13 +1111,15 @@ let allAssessments = [];
 
 async function fetchStudentAssessments() {
     try {
-        const res = await fetch('http://localhost:3000/api/student/assessments', {
-            headers: getAuthHeaders()
-        });
-        if (res.ok) {
-            allAssessments = await res.json();
-            renderAssessments(allAssessments);
+        const id = localStorage.getItem('currentStudentId');
+        if (!id) return;
+        const student = await DatabaseService.getStudent(id);
+        if (student && student.assessments) {
+            allAssessments = student.assessments;
+        } else {
+            allAssessments = [];
         }
+        renderAssessments(allAssessments);
     } catch (err) {
         console.error('Error fetching assessments:', err);
     }
@@ -1064,17 +1185,12 @@ function sortAssessments(key) {
 
 // --- Announcements Logic ---
 async function fetchAnnouncements() {
-    try {
-        const res = await fetch('http://localhost:3000/api/announcements', {
-            headers: getAuthHeaders()
-        });
-        if (res.ok) {
-            const announcements = await res.json();
-            renderAnnouncements(announcements);
-        }
-    } catch (err) {
-        console.error('Error fetching announcements:', err);
-    }
+    // Mock Announcements
+    const announcements = [
+        { id: 1, title: "Welcome to SIMS", content: "Welcome to the new Student Information Management System!", priority: "high", author: "Admin", timestamp: new Date().toISOString() },
+        { id: 2, title: "Exam Schedule", content: "Midterm exams will start next week.", priority: "medium", author: "Registrar", timestamp: new Date().toISOString() }
+    ];
+    renderAnnouncements(announcements);
 }
 
 function renderAnnouncements(data) {
@@ -1144,8 +1260,9 @@ function markAllAnnouncementsRead() {
     });
 }
 
-function renderStudentGrades(gradesData) {
-    const container = document.getElementById('grades-container');
+function renderStudentGrades(gradesData, containerId = 'grades-container', studentId = null) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
     container.innerHTML = '';
     
     if (!gradesData || gradesData.length === 0) {
@@ -1153,49 +1270,101 @@ function renderStudentGrades(gradesData) {
         return;
     }
 
-    gradesData.forEach(semester => {
-        const semesterDiv = document.createElement('div');
-        semesterDiv.className = 'table-container';
-        semesterDiv.style.marginBottom = '30px';
-        
-        let tableHtml = `
-            <h3 style="padding: 15px 20px; color: var(--primary-color); border-bottom: 1px solid #2b3642;">${semester.semester}</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Code</th>
-                        <th>Course Title</th>
-                        <th>Units</th>
-                        <th>Grade</th>
-                    </tr>
-                </thead>
-                <tbody>
+    // Header Info
+    const id = studentId || localStorage.getItem('currentStudentId');
+    DatabaseService.getStudent(id).then(student => {
+        if (!student) return;
+        const headerHtml = `
+            <div class="grade-header-info" style="background-color: var(--white); color: #333; padding: 20px; border-radius: 8px; margin-bottom: 20px; font-family: 'Roboto', sans-serif;">
+                <div style="display: flex; gap: 40px; margin-bottom: 10px;">
+                    <div><span style="font-weight: bold; color: #555;">School Year:</span> <span style="font-weight: bold;">2025-2026</span></div>
+                    <div><span style="font-weight: bold; color: #555;">Term:</span> <span style="font-weight: bold;">Second</span></div>
+                </div>
+                <div style="display: flex; gap: 30px;">
+                    <div><span style="font-weight: bold; color: #555;">Course:</span> <span style="font-weight: bold;">${student.course || 'BSIT'}</span></div>
+                    <div><span style="font-weight: bold; color: #555;">Year Level:</span> <span style="font-weight: bold;">${student.yearLevel || '1 Year'}</span></div>
+                    <div><span style="font-weight: bold; color: #555;">Section:</span> <span style="font-weight: bold;">M002</span></div>
+                </div>
+            </div>
         `;
-        
-        semester.courses.forEach(course => {
-            // Determine grade color
-            let gradeColor = 'var(--white)';
-            const gradeVal = parseFloat(course.grade);
-            if (gradeVal <= 1.25) gradeColor = 'var(--primary-color)'; // Excellent
-            else if (gradeVal >= 3.0) gradeColor = 'var(--danger)'; // Warning/Fail
+        container.insertAdjacentHTML('afterbegin', headerHtml);
+
+        gradesData.forEach((semester, index) => {
+            const semesterDiv = document.createElement('div');
+            semesterDiv.className = 'table-container grade-table-wrapper';
+            semesterDiv.style.marginBottom = '30px';
+            
+            // Calculate GWA
+            let totalUnits = 0;
+            let totalPoints = 0;
+            semester.courses.forEach(c => {
+                const u = parseFloat(c.units) || 0;
+                const g = parseFloat(c.grade) || 0;
+                if (g > 0) {
+                    totalUnits += u;
+                    totalPoints += (u * g);
+                }
+            });
+            const gwa = totalUnits > 0 ? (totalPoints / totalUnits).toFixed(2) : '0.00';
+
+            let tableHtml = `
+                <table class="styled-grade-table">
+                    <thead>
+                        <tr style="background-color: #002b5c; color: white;">
+                            <th style="padding: 12px;">#</th>
+                            <th style="padding: 12px;">SUBJECT CODE</th>
+                            <th style="padding: 12px;">SUBJECT TITLE</th>
+                            <th style="padding: 12px;">PROFESSOR</th>
+                            <th style="padding: 12px;">UNITS</th>
+                            <th style="padding: 12px;">SECTION</th>
+                            <th style="padding: 12px;">PRELIM</th>
+                            <th style="padding: 12px;">MIDTERM</th>
+                            <th style="padding: 12px;">FINAL</th>
+                            <th style="padding: 12px;">AVERAGE</th>
+                            <th style="padding: 12px;">GRADE STATUS</th>
+                        </tr>
+                    </thead>
+                    <tbody style="background-color: white; color: #333;">
+            `;
+            
+            semester.courses.forEach((course, i) => {
+                const gradeVal = parseFloat(course.grade);
+                const status = gradeVal <= 3.0 ? 'Passed' : 'Failed';
+                const statusColor = gradeVal <= 3.0 ? '#2ecc71' : '#ff4d4d';
+                
+                // Mock breakdown grades if not present
+                const prelim = course.prelim || (gradeVal + 0.1).toFixed(2);
+                const midterm = course.midterm || (gradeVal - 0.1).toFixed(2);
+                const final = course.final || gradeVal;
+
+                tableHtml += `
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 12px;">${i + 1}</td>
+                        <td style="padding: 12px;">${course.code}</td>
+                        <td style="padding: 12px;">${course.title || course.name}</td>
+                        <td style="padding: 12px;">${course.professor || 'TBA'}</td>
+                        <td style="padding: 12px;">${course.units}</td>
+                        <td style="padding: 12px;">M002</td>
+                        <td style="padding: 12px;">${prelim}</td>
+                        <td style="padding: 12px;">${midterm}</td>
+                        <td style="padding: 12px;">${final}</td>
+                        <td style="padding: 12px; font-weight: bold;">${course.grade}</td>
+                        <td style="padding: 12px; color: ${statusColor}; font-weight: bold;">${status}</td>
+                    </tr>
+                `;
+            });
             
             tableHtml += `
-                <tr>
-                    <td>${course.code}</td>
-                    <td>${course.title || course.name}</td>
-                    <td>${course.units}</td>
-                    <td style="color: ${gradeColor}; font-weight: bold;">${course.grade}</td>
-                </tr>
+                    </tbody>
+                </table>
+                <div style="background-color: #f0f4f8; padding: 15px; border-radius: 0 0 8px 8px; margin-top: -5px; color: #333; font-weight: bold;">
+                    General Weighted Average (GWA): <span style="float: right; font-size: 1.1rem;">${gwa}</span>
+                </div>
             `;
+            
+            semesterDiv.innerHTML = tableHtml;
+            container.appendChild(semesterDiv);
         });
-        
-        tableHtml += `
-                </tbody>
-            </table>
-        `;
-        
-        semesterDiv.innerHTML = tableHtml;
-        container.appendChild(semesterDiv);
     });
 }
 

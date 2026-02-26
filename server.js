@@ -9,6 +9,24 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const admin = require('firebase-admin');
+require('dotenv').config();
+
+// Initialize Firebase Admin (Placeholder - requires service account)
+// process.env.GOOGLE_APPLICATION_CREDENTIALS should be set
+try {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+        console.log("Firebase Admin initialized");
+    } else {
+        console.log("Firebase Admin not initialized (missing credentials)");
+    }
+} catch (e) {
+    console.warn("Failed to initialize Firebase Admin:", e.message);
+}
 
 const app = express();
 const PORT = 3000;
@@ -21,7 +39,10 @@ const ANNOUNCEMENTS_FILE = path.join(__dirname, 'data', 'announcements.json');
 const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
 
 // Security Middleware
-app.use(helmet());
+app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+}));
 
 // Rate Limiting
 const limiter = rateLimit({
@@ -446,6 +467,36 @@ app.put('/api/admin/assessments/:studentId', authenticateToken, allowRole('admin
 
 // --- User Management Routes ---
 
+// Helper to verify Firebase ID token but remain usable in dev
+async function verifyFirebaseToken(idToken) {
+    if (!idToken) throw new Error('ID Token required');
+    if (admin && admin.apps && admin.apps.length > 0) {
+        return await admin.auth().verifyIdToken(idToken);
+    }
+    console.warn("Using mock token verification (Firebase Admin not initialized)");
+    // In dev, accept any non-empty token and build a pseudo user
+    return { uid: 'dev-' + crypto.randomBytes(6).toString('hex'), email: 'student@local.dev' };
+}
+
+// Firebase Auth Verification Endpoint
+app.post('/api/auth/firebase', loginLimiter, async (req, res) => {
+    try {
+        const { idToken } = req.body;
+        const decodedToken = await verifyFirebaseToken(idToken);
+        const token = jwt.sign(
+            { id: decodedToken.uid, email: decodedToken.email, role: 'student' },
+            SECRET_KEY,
+            { expiresIn: '24h' }
+        );
+        logAction('LOGIN_SUCCESS', decodedToken.email, 'Firebase login', true);
+        return res.json({ token, user: decodedToken, role: 'student' });
+    } catch (error) {
+        console.error("Firebase Auth Error:", error);
+        logAction('LOGIN_FAILED', 'firebase-user', error.message, false);
+        return res.status(401).json({ error: error.message || 'Invalid token' });
+    }
+});
+
 // Login Endpoint - ADMIN ONLY
 app.post('/api/login', loginLimiter, (req, res) => {
     const { email, password } = req.body;
@@ -521,16 +572,22 @@ app.post('/api/login/admin', loginLimiter, (req, res) => {
     return res.json({ token, user: userWithoutPassword, role: 'admin' });
 });
 
-// Student Login Endpoint - RESTRICTED
-app.post('/api/login/student', loginLimiter, (req, res) => {
-    // Log the attempted access
-    const email = req.body.email || 'unknown';
-    logAction('ACCESS_DENIED', email, 'Student login attempted but system is restricted', false);
-    
-    return res.status(403).json({ 
-        error: 'System access is currently restricted to administrators only.',
-        code: 'ACCESS_RESTRICTED'
-    });
+// Student Login Endpoint - Accepts Firebase ID Token
+app.post('/api/login/student', loginLimiter, async (req, res) => {
+    try {
+        const { idToken } = req.body;
+        const decodedToken = await verifyFirebaseToken(idToken);
+        const token = jwt.sign(
+            { id: decodedToken.uid, email: decodedToken.email, role: 'student' },
+            SECRET_KEY,
+            { expiresIn: '24h' }
+        );
+        logAction('LOGIN_SUCCESS', decodedToken.email, 'Student login via /api/login/student', true);
+        return res.json({ token, user: decodedToken, role: 'student' });
+    } catch (error) {
+        logAction('LOGIN_FAILED CARBON', 'student', error.message, false);
+        return res.status(401).json({ error: error.message || 'Invalid credentials' });
+    }
 });
 
 

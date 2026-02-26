@@ -2,7 +2,7 @@
   {
     "username": "admin",
     "email": "admin@sims.com",
-    "password": "$2b$10$AsEbUuKeBFX5NGE/ezhLu.Bs.Q2U/hdIoMuqTxMwfdwW9T752w/Nm",
+    "password": "$2b$10$gzh.QE/j/qloHJFxp1cOBOowKRpJgAs2sdXc.8fmtyJLRmjbCJ9Eq",
     "role": "admin",
     "status": "active",
     "created_at": "2024-01-01T00:00:00.000Z"

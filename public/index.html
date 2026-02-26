@@ -39,7 +39,7 @@
                     <span id="active-role-label"><i class="fas fa-user-shield"></i> Admin Mode</span>
                 </div>
                 
-                <form id="admin-form" class="login-form" onsubmit="handleAdminLogin(event)" aria-hidden="false">
+                <form id="admin-form" class="login-form" aria-hidden="false">
                     <div class="form-group-login">
                         <label for="admin-email">Email</label>
                         <input type="email" id="admin-email" placeholder="admin@sims.com" required>
@@ -62,7 +62,7 @@
                     <button type="submit" class="btn-full-width">Sign In as Admin</button>
                 </form>
                 
-                <form id="student-form" class="login-form" onsubmit="handleStudentLogin(event)" style="display:none;" aria-hidden="true" aria-describedby="student-form-errors">
+                <form id="student-form" class="login-form" style="display:none;" aria-hidden="true" aria-describedby="student-form-errors">
                     <div class="form-group-login">
                         <label for="student-id">Email or Student ID</label>
                         <input type="text" id="student-id" placeholder="name@school.edu or ID">
@@ -97,6 +97,13 @@
                         <span class="btn-text">Sign In as Student</span>
                         <span class="spinner" aria-hidden="true"></span>
                     </button>
+                    
+                    <div class="divider">
+                        <span>OR</span>
+                    </div>
+                    <button type="button" class="btn-full-width btn-secondary" onclick="handleGoogleLogin()">
+                        <i class="fab fa-google"></i> Sign in with Google
+                    </button>
                 </form>
             </div>
         </div>
@@ -112,7 +119,7 @@
             <ul>
                 <li class="active" onclick="showSection('dashboard')" tabindex="0" role="button" aria-label="Overview"><i class="fas fa-home"></i> Dashboard</li>
                 <li onclick="showSection('students')" tabindex="0" role="button" aria-label="Students"><i class="fas fa-users"></i> Students</li>
-                <li onclick="showSection('admin-grading'); initAdminTerm('prelim'); initAdminTerm('midterm'); initAdminTerm('final')" tabindex="0" role="button" aria-label="Grading Sheet"><i class="fas fa-clipboard-check"></i> Grading Sheet</li>
+                <li onclick="showSection('admin-grading'); loadAdminGradingSheet()" tabindex="0" role="button" aria-label="Grading Sheet"><i class="fas fa-clipboard-check"></i> Grading Sheet</li>
                 <li onclick="showSection('admin-announcements'); initAdminAnnouncements()" tabindex="0" role="button" aria-label="Announcements"><i class="fas fa-bullhorn"></i> Announcements</li>
             </ul>
         </nav>
@@ -285,7 +292,13 @@
                             </div>
                         </div>
 
-
+                        <!-- Grades Section -->
+                        <div class="detail-card" style="background-color: transparent; padding: 0;">
+                            <h3>Semester Grades</h3>
+                            <div id="admin-view-grades-container">
+                                <!-- Grades will be rendered here -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -295,103 +308,24 @@
                 <div class="section-header">
                     <h2>Grading Sheet</h2>
                 </div>
-                <div class="term-grid">
-                    <div class="term-card term-prelim">
-                        <div class="term-header">
-                            <i class="fas fa-seedling"></i>
-                            <h3>Prelims</h3>
-                        </div>
-                        <div class="controls compact">
-                            <input id="prelim-name" type="text" placeholder="Assignment name" aria-label="Assignment name">
-                            <input id="prelim-max" type="number" min="1" placeholder="Max" aria-label="Max score">
-                            <input id="prelim-date" type="date" aria-label="Due date">
-                            <button class="btn-primary" onclick="initAdminTerm('prelim')" aria-label="Refresh prelim"><i class="fas fa-sync"></i></button>
-                        </div>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Name</th>
-                                        <th>Status</th>
-                                        <th>Score</th>
-                                        <th>%</th>
-                                        <th>Save</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="prelim-body"></tbody>
-                            </table>
-                        </div>
-                        <div class="fab-summary">
-                            <span id="prelim-total">0 students</span>
-                            <span id="prelim-submitted">0 submitted</span>
-                            <span id="prelim-missing">0 missing</span>
-                        </div>
-                    </div>
-                    <div class="term-card term-mid">
-                        <div class="term-header">
-                            <i class="fas fa-road"></i>
-                            <h3>Mid-Terms</h3>
-                        </div>
-                        <div class="controls compact">
-                            <input id="midterm-name" type="text" placeholder="Assignment name" aria-label="Assignment name">
-                            <input id="midterm-max" type="number" min="1" placeholder="Max" aria-label="Max score">
-                            <input id="midterm-date" type="date" aria-label="Due date">
-                            <button class="btn-primary" onclick="initAdminTerm('midterm')" aria-label="Refresh midterms"><i class="fas fa-sync"></i></button>
-                        </div>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Name</th>
-                                        <th>Status</th>
-                                        <th>Score</th>
-                                        <th>%</th>
-                                        <th>Save</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="midterm-body"></tbody>
-                            </table>
-                        </div>
-                        <div class="fab-summary">
-                            <span id="midterm-total">0 students</span>
-                            <span id="midterm-submitted">0 submitted</span>
-                            <span id="midterm-missing">0 missing</span>
-                        </div>
-                    </div>
-                    <div class="term-card term-final">
-                        <div class="term-header">
-                            <i class="fas fa-flag-checkered"></i>
-                            <h3>Finals</h3>
-                        </div>
-                        <div class="controls compact">
-                            <input id="final-name" type="text" placeholder="Assignment name" aria-label="Assignment name">
-                            <input id="final-max" type="number" min="1" placeholder="Max" aria-label="Max score">
-                            <input id="final-date" type="date" aria-label="Due date">
-                            <button class="btn-primary" onclick="initAdminTerm('final')" aria-label="Refresh finals"><i class="fas fa-sync"></i></button>
-                        </div>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Name</th>
-                                        <th>Status</th>
-                                        <th>Score</th>
-                                        <th>%</th>
-                                        <th>Save</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="final-body"></tbody>
-                            </table>
-                        </div>
-                        <div class="fab-summary">
-                            <span id="final-total">0 students</span>
-                            <span id="final-submitted">0 submitted</span>
-                            <span id="final-missing">0 missing</span>
-                        </div>
-                    </div>
+                <div class="table-container">
+                    <table class="styled-grade-table">
+                        <thead>
+                            <tr style="background-color: #002b5c; color: white;">
+                                <th>Student Name</th>
+                                <th>Subject 1</th>
+                                <th>Subject 2</th>
+                                <th>Subject 3</th>
+                                <th>Subject 4</th>
+                                <th>Average</th>
+                                <th>Grade</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-grading-body" style="background-color: white; color: #333;">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
                 </div>
             </section>
             
@@ -536,36 +470,185 @@
     </div>
 
     <div id="registerModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content large-modal">
             <span class="close" id="registerClose">&times;</span>
-            <h2>Create Account</h2>
-            <form id="registerForm">
-                <div class="form-group">
-                    <label for="reg-student-id">Student ID</label>
-                    <input type="text" id="reg-student-id" required>
-                </div>
-                <div class="form-group">
-                    <label for="reg-email">Email</label>
-                    <input type="email" id="reg-email" required>
-                </div>
-                <div class="form-group">
-                    <label for="reg-password">Password</label>
-                    <input type="password" id="reg-password" required aria-describedby="strength-text">
-                    <div class="strength-meter">
-                        <div id="strength-bar"></div>
+            <h2 style="margin-bottom:10px;">Student Registration Form</h2>
+            <form id="registerForm" class="reg-grid">
+                
+                <div class="form-columns">
+                    <!-- Column 1: Identity -->
+                    <div class="form-column">
+                        <h3>Identity</h3>
+                        <div class="form-group">
+                            <label>Student ID *</label>
+                            <input type="text" id="reg-student-id" required placeholder="e.g. 11183021">
+                        </div>
+                        <div class="form-group">
+                            <label>First Name *</label>
+                            <input type="text" id="reg-first-name" required placeholder="First Name">
+                        </div>
+                        <div class="form-group">
+                            <label>Middle Name</label>
+                            <input type="text" id="reg-middle-name" placeholder="Middle Name">
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name *</label>
+                            <input type="text" id="reg-last-name" required placeholder="Last Name">
+                        </div>
+                        <div class="form-group">
+                            <label>Date of Birth</label>
+                            <input type="date" id="reg-dob">
+                        </div>
                     </div>
-                    <div id="strength-text" class="hint"></div>
+
+                    <!-- Column 2: Academic & Contact -->
+                    <div class="form-column">
+                        <h3>Academic & Contact</h3>
+                        <div class="form-group">
+                            <label>Course *</label>
+                            <select id="reg-degree" required>
+                                <option value="" disabled selected>Select Course</option>
+                                <optgroup label="College of Arts & Sciences">
+                                    <option value="ABCom">ABCom - Bachelor of Arts in Communication</option>
+                                    <option value="ABEng">ABEng - Bachelor of Arts in English</option>
+                                    <option value="BSM">BSM - Bachelor of Science in Mathematics</option>
+                                    <option value="BSP">BSP - Bachelor of Science in Psychology</option>
+                                </optgroup>
+                                <optgroup label="College of Business & Accountancy">
+                                    <option value="ABA">ABA - Associate in Business Administration</option>
+                                    <option value="BSAIS">BSAIS - Bachelor of Science in Accounting Information System</option>
+                                    <option value="BSA">BSA - Bachelor of Science in Accountancy</option>
+                                    <option value="BSMA">BSMA - Bachelor of Science in Management Accounting</option>
+                                    <option value="BSREM">BSREM - Bachelor of Science in Real Estate Management</option>
+                                    <option value="BSIA">BSIA - Bachelor of Science in Internal Auditing</option>
+                                    <option value="BSLM">BSLM - Bachelor of Science in Legal Management</option>
+                                    <option value="BSBA">BSBA - Bachelor of Science in Business Administration</option>
+                                </optgroup>
+                                <optgroup label="College of Computer Studies">
+                                    <option value="ACT">ACT - Associate in Computer Technology</option>
+                                    <option value="BSCS">BSCS - Bachelor of Science in Computer Science</option>
+                                    <option value="BSIT">BSIT - Bachelor of Science in Information Technology</option>
+                                    <option value="BSIS">BSIS - Bachelor of Science in Information System</option>
+                                </optgroup>
+                                <optgroup label="College of Education">
+                                    <option value="BECEd">BECEd - Bachelor in Early Childhood Education</option>
+                                    <option value="BELEd">BELEd - Bachelor in Elementary Education</option>
+                                    <option value="BSEd">BSEd - Bachelor in Secondary Education</option>
+                                    <option value="BTVTEd">BTVTEd - Bachelor in Technical-Vocational Teacher Education</option>
+                                </optgroup>
+                                <optgroup label="International School of Hospitality & Tourism Management">
+                                    <option value="BSHM">BSHM - Bachelor of Science in Hospitality Management</option>
+                                    <option value="BSTM">BSTM - Bachelor of Science in Tourism Management</option>
+                                </optgroup>
+                                <optgroup label="College of Criminology & Administration">
+                                    <option value="BSC">BSC - Bachelor of Science in Criminology</option>
+                                    <option value="BSISM">BSISM - Bachelor of Science in Industrial Security Management</option>
+                                    <option value="BSPA">BSPA - Bachelor of Science in Public Administration</option>
+                                </optgroup>
+                                <optgroup label="College of Engineering & Digital Technology">
+                                    <option value="BSCpE">BSCpE - Bachelor of Science in Computer Engineering</option>
+                                    <option value="BSECE">BSECE - Bachelor of Science in Electronics Engineering</option>
+                                </optgroup>
+                                <optgroup label="College of Health Sciences">
+                                    <option value="BSMedTech">BSMedTech - Bachelor of Science in Medical Technology</option>
+                                    <option value="BSN">BSN - Bachelor of Science in Nursing</option>
+                                </optgroup>
+                                <optgroup label="Technical-Vocational Programs">
+                                    <option value="DHRM1">DHRM1 - Diploma in Hotel & Restaurant Management-1</option>
+                                    <option value="DHRM2">DHRM2 - Diploma in Hotel & Restaurant Management-2</option>
+                                    <option value="DTMA">DTMA - Diploma in Tourism Management Associate</option>
+                                    <option value="DSDA">DSDA - Diploma in Software Development Associate</option>
+                                    <option value="OCCS">OCCS - Diploma in Consumer Electronics & Computer Hardware Servicing</option>
+                                    <option value="DHWA">DHWA - Diploma in Health Care & Wellness Associate</option>
+                                    <option value="CCG">CCG - Certificate in Professional Caregiving NCII</option>
+                                    <option value="DOSM">DOSM - Diploma in Office System Management</option>
+                                    <option value="DMFT">DMFT - Diploma in Microfinance Technology</option>
+                                </optgroup>
+                                <optgroup label="Senior High School">
+                                    <option value="ABM">ABM - Accountancy, Business & Management</option>
+                                    <option value="STEM">STEM - Science, Technology, Engineering & Mathematics</option>
+                                    <option value="HUMSS">HUMSS - Humanities & Social Sciences</option>
+                                    <option value="GAS">GAS - General Academic Strand</option>
+                                    <option value="ICT">ICT - Information Communication Technology</option>
+                                    <option value="HE">HE - Home Economics</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Year Level</label>
+                            <select id="reg-year-level" required>
+                                <option value="" disabled selected>Select Year Level</option>
+                                <option value="1">1st Year</option>
+                                <option value="2">2nd Year</option>
+                                <option value="3">3rd Year</option>
+                                <option value="4">4th Year</option>
+                                <option value="5">5th Year</option>
+                                <option value="11">Grade 11 (Senior High)</option>
+                                <option value="12">Grade 12 (Senior High)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Admission Date</label>
+                            <input type="date" id="reg-admission-date">
+                        </div>
+                        <div class="form-group">
+                            <label>Mobile Number</label>
+                            <input type="tel" id="reg-phone" placeholder="(000) 000-0000">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="reg-email" required placeholder="ex: myname@example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Age</label>
+                            <input type="number" id="reg-age" min="0">
+                        </div>
+                    </div>
+
+                    <!-- Column 3: Address & Guardian -->
+                    <div class="form-column">
+                        <h3>Address & Guardian</h3>
+                        <div class="form-group">
+                            <label>Current Address</label>
+                            <textarea id="reg-current-address" rows="2"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Permanent Address</label>
+                            <textarea id="reg-permanent-address" rows="2"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Father's Name</label>
+                            <input type="text" id="reg-father-name">
+                        </div>
+                        <div class="form-group">
+                            <label>Mother's Name</label>
+                            <input type="text" id="reg-mother-name">
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="reg-confirm">Confirm Password</label>
-                    <input type="password" id="reg-confirm" required>
+
+                <!-- Password Section (Required for Account Creation) -->
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #333;">
+                    <h3 style="margin-bottom: 15px; font-size: 1.1rem; color: var(--secondary-color);">Account Security</h3>
+                    <div class="reg-row-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div class="reg-field">
+                            <label for="reg-password">Password *</label>
+                            <input type="password" id="reg-password" required aria-describedby="strength-text">
+                            <div class="strength-meter"><div id="strength-bar"></div></div>
+                            <div id="strength-text" class="hint"></div>
+                        </div>
+                        <div class="reg-field">
+                            <label for="reg-confirm">Confirm Password *</label>
+                            <input type="password" id="reg-confirm" required>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-actions">
+                
+                <div class="form-actions full" style="margin-top: 20px;">
                     <button type="button" class="btn-secondary" id="registerCancel">Cancel</button>
                     <button type="submit" class="btn-primary">Register</button>
                 </div>
             </form>
-            <div class="hint">For demo only. Backend integration required.</div>
         </div>
     </div>
 
@@ -740,6 +823,10 @@
 
     <!-- Sidebar Overlay (Mobile) -->
     <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Local Storage Service (Replaces Firebase) -->
+    <!-- <script type="module" src="firebase-config.js"></script> -->
+    <script src="database-service.js"></script>
 
     <!-- Scripts -->
     <script src="script.js"></script>
